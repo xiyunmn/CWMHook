@@ -47,15 +47,24 @@ object ReaderFontConfigStore {
             .toList()
     }
 
-    fun rememberFont(context: Context, path: String) {
-        val normalized = File(path).absolutePath
+    fun rememberFonts(context: Context, paths: List<String>) {
+        val normalized = paths.map { File(it).absolutePath }
         val fonts = buildList {
-            addAll(readFonts(context).filterNot { it == normalized })
-            add(normalized)
+            addAll(readFonts(context).filterNot { it in normalized })
+            addAll(normalized)
         }
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        writeFonts(context, fonts)
+    }
+
+    fun writeFonts(context: Context, paths: List<String>): Boolean {
+        val normalized = paths.asSequence()
+            .map { File(it).absolutePath }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+        return context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_FONTS, fonts.joinToString("\n"))
-            .apply()
+            .putString(KEY_FONTS, normalized.joinToString("\n"))
+            .commit()
     }
 }
