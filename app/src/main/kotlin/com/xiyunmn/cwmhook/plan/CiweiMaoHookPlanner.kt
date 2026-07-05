@@ -1,6 +1,7 @@
 package com.xiyunmn.cwmhook.plan
 
 import com.xiyunmn.cwmhook.app.FloatingModulePanelFeature
+import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
@@ -20,6 +21,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("ReaderFontFeature.install") { classLoader ->
                     ReaderFontFeature.install(module, classLoader)
+                },
+                HookInstallEntry("AutoSignInFeature.install") { classLoader ->
+                    AutoSignInFeature.install(module, classLoader)
                 },
                 HookInstallEntry("FloatingModulePanelFeature.install") { classLoader ->
                     FloatingModulePanelFeature.install(module, classLoader)
@@ -45,6 +49,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("ReaderFontFeature.retryDeferredHooks") { classLoader ->
                     ReaderFontFeature.retryDeferredHooks(module, classLoader, reason)
+                },
+                HookInstallEntry("AutoSignInFeature.retryDeferredHooks") { classLoader ->
+                    AutoSignInFeature.retryDeferredHooks(module, classLoader, reason)
                 },
                 HookInstallEntry("FloatingModulePanelFeature.retryDeferredHooks") { classLoader ->
                     FloatingModulePanelFeature.retryDeferredHooks(module, classLoader, reason)

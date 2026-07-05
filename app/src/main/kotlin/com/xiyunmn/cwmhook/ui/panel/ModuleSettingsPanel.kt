@@ -9,9 +9,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
+import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
+import com.xiyunmn.cwmhook.ui.autosignin.AutoSignInSettingsSection
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabEditorPanel
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import com.xiyunmn.cwmhook.ui.common.dp
@@ -25,15 +28,19 @@ internal class ModuleSettingsPanel(
     private val initialStatusBarConfig: StatusBarConfig,
     private val initialBottomTabConfig: BottomTabConfig,
     private val initialReaderFontConfig: ReaderFontConfig,
+    private val initialAutoSignInConfig: AutoSignInConfig,
     private val onClearStatusBarCache: () -> Boolean,
     private val onReapplyStatusBar: () -> Unit,
-    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig) -> Unit,
+    private val onManualAutoSignIn: () -> Unit,
+    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig) -> Unit,
     private val onClose: () -> Unit,
 ) {
     private var statusBarConfig = initialStatusBarConfig
     private var bottomTabConfig = initialBottomTabConfig
     private var readerFontConfig = initialReaderFontConfig
+    private var autoSignInConfig = initialAutoSignInConfig
     private var statusBarExpanded = false
+    private var autoSignInExpanded = false
     private var readerFontExpanded = false
     private var bottomTabExpanded = false
 
@@ -62,6 +69,7 @@ internal class ModuleSettingsPanel(
                 setPadding(dp(activity, 18), dp(activity, 14), dp(activity, 18), dp(activity, 14))
             }
             addStatusBarSection(content, ::renderPanel)
+            addAutoSignInSection(content, ::renderPanel)
             addReaderFontSection(content, ::renderPanel)
             addBottomTabSection(content, ::renderPanel)
 
@@ -76,7 +84,7 @@ internal class ModuleSettingsPanel(
                 bottomTabEditorPanel.createFooter(
                     onResetClick = { renderPanel() },
                     onSaveClick = {
-                        onSave(statusBarConfig, bottomTabConfig, readerFontConfig)
+                        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig)
                         onClose()
                     },
                 ),
@@ -118,6 +126,37 @@ internal class ModuleSettingsPanel(
 
                     override fun onExpandedChanged(expanded: Boolean) {
                         statusBarExpanded = expanded
+                        renderPanel()
+                    }
+                },
+            ),
+            sectionParams(),
+        )
+    }
+
+    private fun addAutoSignInSection(content: LinearLayout, renderPanel: () -> Unit) {
+        val section = AutoSignInSettingsSection(activity, theme)
+        content.addView(
+            section.createView(
+                AutoSignInSettingsSection.UiState(
+                    enabled = autoSignInConfig.enabled,
+                    expanded = autoSignInExpanded,
+                ),
+                object : AutoSignInSettingsSection.Callbacks {
+                    override fun onEnabledChanged(enabled: Boolean) {
+                        autoSignInConfig = autoSignInConfig.copy(
+                            enabled = enabled,
+                            version = AutoSignInConfigStore.nextVersion(autoSignInConfig),
+                        )
+                        renderPanel()
+                    }
+
+                    override fun onManualSignIn() {
+                        onManualAutoSignIn()
+                    }
+
+                    override fun onExpandedChanged(expanded: Boolean) {
+                        autoSignInExpanded = expanded
                         renderPanel()
                     }
                 },

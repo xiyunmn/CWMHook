@@ -4,6 +4,8 @@ import android.app.Activity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.Toast
+import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
+import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
@@ -11,6 +13,7 @@ import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.panel.FloatingPanelEntryResolver
 import com.xiyunmn.cwmhook.feature.panel.FloatingPanelHookInstaller
@@ -97,14 +100,18 @@ object FloatingModulePanelFeature {
             initialStatusBarConfig = StatusBarConfigStore.readLocal(activity),
             initialBottomTabConfig = BottomTabConfigStore.readLocal(activity),
             initialReaderFontConfig = ReaderFontConfigStore.readLocal(activity),
+            initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
             onClearStatusBarCache = {
                 ImmersiveStatusBarFeature.clearColorCache(activity)
             },
             onReapplyStatusBar = {
                 ImmersiveStatusBarFeature.reapplyForegroundWindow("manual")
             },
-            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig ->
-                saveAllConfigs(activity, statusBarConfig, bottomTabConfig, readerFontConfig)
+            onManualAutoSignIn = {
+                AutoSignInFeature.triggerManual(activity)
+            },
+            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig ->
+                saveAllConfigs(activity, statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig)
             },
             onClose = {
                 FloatingPanelWindow.close(overlay, "save") { reason -> onPanelClosed(activity, reason) }
@@ -117,14 +124,16 @@ object FloatingModulePanelFeature {
         statusBarConfig: StatusBarConfig,
         bottomTabConfig: BottomTabConfig,
         readerFontConfig: ReaderFontConfig,
+        autoSignInConfig: AutoSignInConfig,
     ) {
         val statusBarSaved = StatusBarConfigStore.writeLocal(activity, statusBarConfig)
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
+        val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
 
         BottomTabFeature.applyRuntimeConfig(activity, bottomTabConfig, "floating panel")
 
-        val message = if (statusBarSaved && bottomTabSaved && readerFontSaved) {
+        val message = if (statusBarSaved && bottomTabSaved && readerFontSaved && autoSignInSaved) {
             "已保存，底栏已应用"
         } else {
             "部分配置保存失败，请查看日志"
