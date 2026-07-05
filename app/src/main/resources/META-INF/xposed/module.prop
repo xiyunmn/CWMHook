@@ -1,0 +1,9 @@
+id=com.xiyunmn.cwmhook
+name=CWMHook
+author=xiyunmn
+description=LSPosed module for Ciweimao Novel. Uses modern libxposed API 101 only.
+version=0.1.0
+versionCode=1
+minApiVersion=101
+targetApiVersion=101
+staticScope=true

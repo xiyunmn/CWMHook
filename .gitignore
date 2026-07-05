@@ -1,0 +1,30 @@
+.gradle/
+.kotlin/
+.idea/
+build/
+*/build/
+app/release/
+local.properties
+*.iml
+
+# Android artifacts
+*.apk
+*.apks
+*.aab
+*.dex
+*.prof
+*.hprof
+
+# Runtime/debug output
+log/
+*.log
+
+# Local reverse-engineering bulk artifacts. Keep these on disk, but track
+# curated maintenance docs under Target_app/逆向分析/00_总报告.
+Target_app/*.apk
+Target_app/*.zip
+Target_app/逆向分析/01_APKTool_资源与Manifest/
+Target_app/逆向分析/02_JADX_APK静态反编译/
+Target_app/逆向分析/03_运行时DumpDex/
+Target_app/逆向分析/04_JADX_运行时Dex反编译/
+Target_app/逆向分析/05_IDA_Native分析/
