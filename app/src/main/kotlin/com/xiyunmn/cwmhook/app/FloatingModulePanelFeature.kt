@@ -8,6 +8,8 @@ import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
+import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
+import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
@@ -17,6 +19,7 @@ import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
+import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.panel.FloatingPanelEntryResolver
 import com.xiyunmn.cwmhook.feature.panel.FloatingPanelHookInstaller
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
@@ -112,6 +115,7 @@ object FloatingModulePanelFeature {
             initialReaderFontConfig = ReaderFontConfigStore.readLocal(activity),
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
             initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
+            initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
             onClearStatusBarCache = {
                 ImmersiveStatusBarFeature.clearColorCache(activity)
             },
@@ -121,8 +125,25 @@ object FloatingModulePanelFeature {
             onManualAutoSignIn = {
                 AutoSignInFeature.triggerManual(activity)
             },
-            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig ->
-                saveAllConfigs(activity, statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig)
+            onChooseChapterBackupDirectory = {
+                ChapterBackupFeature.launchDirectoryPicker(activity)
+            },
+            onClearChapterBackupDirectory = {
+                ChapterBackupFeature.clearExportDirectory(activity)
+            },
+            onExportCachedChapters = {
+                ChapterBackupFeature.exportCachedBooks(activity)
+            },
+            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig, chapterBackupConfig ->
+                saveAllConfigs(
+                    activity,
+                    statusBarConfig,
+                    bottomTabConfig,
+                    readerFontConfig,
+                    autoSignInConfig,
+                    startupTabConfig,
+                    chapterBackupConfig,
+                )
             },
             onClose = {
                 FloatingPanelWindow.close(overlay, "save") { reason -> onPanelClosed(activity, reason) }
@@ -137,16 +158,28 @@ object FloatingModulePanelFeature {
         readerFontConfig: ReaderFontConfig,
         autoSignInConfig: AutoSignInConfig,
         startupTabConfig: StartupTabConfig,
+        chapterBackupConfig: ChapterBackupConfig,
     ) {
         val statusBarSaved = StatusBarConfigStore.writeLocal(activity, statusBarConfig)
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
         val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
         val startupTabSaved = StartupTabConfigStore.writeLocal(activity, startupTabConfig)
+        val chapterBackupSaved = ChapterBackupConfigStore.writeLocal(
+            activity,
+            chapterBackupConfig,
+        )
 
         BottomTabFeature.applyRuntimeConfig(activity, bottomTabConfig, "floating panel")
 
-        val message = if (statusBarSaved && bottomTabSaved && readerFontSaved && autoSignInSaved && startupTabSaved) {
+        val message = if (
+            statusBarSaved &&
+            bottomTabSaved &&
+            readerFontSaved &&
+            autoSignInSaved &&
+            startupTabSaved &&
+            chapterBackupSaved
+        ) {
             "已保存，底栏已应用，启动默认 Tab 下次进入生效"
         } else {
             "部分配置保存失败，请查看日志"

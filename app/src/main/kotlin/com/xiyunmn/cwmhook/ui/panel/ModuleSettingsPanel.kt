@@ -12,12 +12,16 @@ import android.widget.Toast
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
+import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
+import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
+import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupDestination
 import com.xiyunmn.cwmhook.ui.autosignin.AutoSignInSettingsSection
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabEditorPanel
+import com.xiyunmn.cwmhook.ui.chapterbackup.ChapterBackupSettingsSection
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import com.xiyunmn.cwmhook.ui.common.dp
 import com.xiyunmn.cwmhook.ui.common.roundRect
@@ -33,10 +37,14 @@ internal class ModuleSettingsPanel(
     private val initialReaderFontConfig: ReaderFontConfig,
     private val initialAutoSignInConfig: AutoSignInConfig,
     private val initialStartupTabConfig: StartupTabConfig,
+    private val initialChapterBackupConfig: ChapterBackupConfig,
     private val onClearStatusBarCache: () -> Boolean,
     private val onReapplyStatusBar: () -> Unit,
     private val onManualAutoSignIn: () -> Unit,
-    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig, StartupTabConfig) -> Unit,
+    private val onChooseChapterBackupDirectory: () -> Unit,
+    private val onClearChapterBackupDirectory: () -> Boolean,
+    private val onExportCachedChapters: () -> Unit,
+    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig, StartupTabConfig, ChapterBackupConfig) -> Unit,
     private val onClose: () -> Unit,
 ) {
     private var statusBarConfig = initialStatusBarConfig
@@ -44,10 +52,12 @@ internal class ModuleSettingsPanel(
     private var readerFontConfig = initialReaderFontConfig
     private var autoSignInConfig = initialAutoSignInConfig
     private var startupTabConfig = initialStartupTabConfig
+    private var chapterBackupConfig = initialChapterBackupConfig
     private var statusBarExpanded = false
     private var autoSignInExpanded = false
     private var readerFontExpanded = false
     private var startupTabExpanded = false
+    private var chapterBackupExpanded = false
     private var bottomTabExpanded = false
 
     private val bottomTabEditorPanel = BottomTabEditorPanel(
@@ -76,6 +86,7 @@ internal class ModuleSettingsPanel(
             }
             addStatusBarSection(content, ::renderPanel)
             addAutoSignInSection(content, ::renderPanel)
+            addChapterBackupSection(content, ::renderPanel)
             addReaderFontSection(content, ::renderPanel)
             addStartupTabSection(content, ::renderPanel)
             addBottomTabSection(content, ::renderPanel)
@@ -91,7 +102,15 @@ internal class ModuleSettingsPanel(
                 bottomTabEditorPanel.createFooter(
                     onResetClick = { renderPanel() },
                     onSaveClick = {
-                        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig)
+                        syncChapterBackupPathFromStore()
+                        onSave(
+                            statusBarConfig,
+                            bottomTabConfig,
+                            readerFontConfig,
+                            autoSignInConfig,
+                            startupTabConfig,
+                            chapterBackupConfig,
+                        )
                         onClose()
                     },
                 ),
@@ -199,6 +218,95 @@ internal class ModuleSettingsPanel(
         )
     }
 
+    private fun addChapterBackupSection(content: LinearLayout, renderPanel: () -> Unit) {
+        val section = ChapterBackupSettingsSection(activity, theme)
+        content.addView(
+            section.createView(
+                ChapterBackupSettingsSection.UiState(
+                    enabled = chapterBackupConfig.enabled,
+                    expanded = chapterBackupExpanded,
+                    exportPathLabel = chapterBackupPathLabel(),
+                ),
+                object : ChapterBackupSettingsSection.Callbacks {
+                    override fun onEnabledChanged(enabled: Boolean) {
+                        chapterBackupConfig = chapterBackupConfig.copy(
+                            enabled = enabled,
+                            version = ChapterBackupConfigStore.nextVersion(chapterBackupConfig),
+                        )
+                        renderPanel()
+                    }
+
+                    override fun onChooseDirectory() {
+                        onChooseChapterBackupDirectory()
+                        scheduleChapterBackupPathRefresh(renderPanel)
+                    }
+
+                    override fun onClearDirectory() {
+                        if (onClearChapterBackupDirectory()) {
+                            chapterBackupConfig = chapterBackupConfig.copy(
+                                exportTreeUri = null,
+                                version = ChapterBackupConfigStore.nextVersion(chapterBackupConfig),
+                            )
+                            Toast.makeText(activity, "导出路径已清除", Toast.LENGTH_SHORT).show()
+                            renderPanel()
+                        } else {
+                            Toast.makeText(activity, "清除失败，请查看日志", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    override fun onExportCached() {
+                        if (!chapterBackupConfig.enabled) {
+                            Toast.makeText(activity, "请先启用个人章节导出", Toast.LENGTH_SHORT).show()
+                            return
+                        }
+                        syncChapterBackupPathFromStore()
+                        ChapterBackupConfigStore.writeLocal(
+                            activity,
+                            chapterBackupConfig,
+                        )
+                        onExportCachedChapters()
+                    }
+
+                    override fun onExpandedChanged(expanded: Boolean) {
+                        chapterBackupExpanded = expanded
+                        renderPanel()
+                    }
+                },
+            ),
+            sectionParams(),
+        )
+    }
+
+    private fun chapterBackupPathLabel(): String {
+        return ChapterBackupDestination(activity, chapterBackupConfig.exportTreeUri, CHAPTER_EXPORT_LOG_TAG)
+            .exportDirectoryLabel()
+    }
+
+    private fun syncChapterBackupPathFromStore(): Boolean {
+        val persisted = ChapterBackupConfigStore.readLocal(activity)
+        if (persisted.exportTreeUri == chapterBackupConfig.exportTreeUri) {
+            return false
+        }
+        chapterBackupConfig = chapterBackupConfig.copy(
+            exportTreeUri = persisted.exportTreeUri,
+            version = maxOf(chapterBackupConfig.version, persisted.version),
+        )
+        return true
+    }
+
+    private fun scheduleChapterBackupPathRefresh(renderPanel: () -> Unit) {
+        listOf(600L, 1500L, 3000L, 6000L, 12000L, 24000L, 45000L).forEach { delay ->
+            activity.window.decorView.postDelayed(
+                {
+                    if (syncChapterBackupPathFromStore()) {
+                        renderPanel()
+                    }
+                },
+                delay,
+            )
+        }
+    }
+
     private fun addBottomTabSection(content: LinearLayout, renderPanel: () -> Unit) {
         content.addView(
             bottomTabEditorPanel.createContent(
@@ -278,5 +386,9 @@ internal class ModuleSettingsPanel(
         return LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = dp(activity, 16)
         }
+    }
+
+    private companion object {
+        const val CHAPTER_EXPORT_LOG_TAG = "CWMHook.ChapterExport"
     }
 }
