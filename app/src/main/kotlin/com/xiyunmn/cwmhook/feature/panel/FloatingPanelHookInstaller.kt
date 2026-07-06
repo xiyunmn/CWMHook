@@ -1,7 +1,10 @@
 package com.xiyunmn.cwmhook.feature.panel
 
 import android.app.Activity
+import android.os.Bundle
 import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
@@ -12,17 +15,20 @@ import java.lang.reflect.Executable
 internal class FloatingPanelHookInstaller(
     private val logTag: String,
     private val onFragmentEntryReady: (Any) -> Unit,
+    private val onBookShelfEntryReady: (Any) -> Unit,
     private val onMainFrameActivityReady: (Activity, String) -> Unit,
     private val isBackKey: (KeyEvent?) -> Boolean,
     private val hasPanel: (Activity) -> Boolean,
     private val closePanel: (Activity, String) -> Boolean,
 ) {
     private var recommendHookInstalled = false
+    private var bookShelfHookInstalled = false
     private var activityHookInstalled = false
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
         hookMainActivityLifecycle(module)
         hookRecommendEntry(module, classLoader)
+        hookBookShelfEntry(module, classLoader)
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
@@ -30,6 +36,10 @@ internal class FloatingPanelHookInstaller(
         if (!recommendHookInstalled) {
             ModuleFileLogger.i(logTag, "Retry floating panel hook: $reason")
             hookRecommendEntry(module, classLoader)
+        }
+        if (!bookShelfHookInstalled) {
+            ModuleFileLogger.i(logTag, "Retry bookshelf floating panel hook: $reason")
+            hookBookShelfEntry(module, classLoader)
         }
     }
 
@@ -58,6 +68,38 @@ internal class FloatingPanelHookInstaller(
         }
         recommendHookInstalled = true
         ModuleFileLogger.i(logTag, "Floating panel entry hook installed")
+    }
+
+    private fun hookBookShelfEntry(module: XposedModule, classLoader: ClassLoader) {
+        if (bookShelfHookInstalled) {
+            return
+        }
+        val fragmentClass = try {
+            Class.forName(CiweiMaoClasses.BOOK_SHELF_FRAGMENT, false, classLoader)
+        } catch (_: Throwable) {
+            ModuleFileLogger.i(logTag, "BookShelfFrgment1 not visible yet, floating panel hook deferred")
+            return
+        }
+        val method = runCatching {
+            fragmentClass.getDeclaredMethod(
+                "onCreateView",
+                LayoutInflater::class.java,
+                ViewGroup::class.java,
+                Bundle::class.java,
+            ).also { it.isAccessible = true }
+        }.getOrElse { throwable ->
+            ModuleFileLogger.e(logTag, "BookShelfFrgment1.onCreateView not found", throwable)
+            return
+        }
+
+        val hooked = hookAfter(module, method) { chain ->
+            onBookShelfEntryReady(chain.thisObject)
+        }
+        if (!hooked) {
+            return
+        }
+        bookShelfHookInstalled = true
+        ModuleFileLogger.i(logTag, "Bookshelf floating panel entry hook installed")
     }
 
     private fun hookMainActivityLifecycle(module: XposedModule) {

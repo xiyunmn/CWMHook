@@ -13,6 +13,8 @@ import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
+import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
+import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.ui.autosignin.AutoSignInSettingsSection
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabEditorPanel
@@ -20,6 +22,7 @@ import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import com.xiyunmn.cwmhook.ui.common.dp
 import com.xiyunmn.cwmhook.ui.common.roundRect
 import com.xiyunmn.cwmhook.ui.readerfont.ReaderFontSettingsSection
+import com.xiyunmn.cwmhook.ui.startuptab.StartupTabSettingsSection
 import com.xiyunmn.cwmhook.ui.statusbar.StatusBarSettingsSection
 
 internal class ModuleSettingsPanel(
@@ -29,19 +32,22 @@ internal class ModuleSettingsPanel(
     private val initialBottomTabConfig: BottomTabConfig,
     private val initialReaderFontConfig: ReaderFontConfig,
     private val initialAutoSignInConfig: AutoSignInConfig,
+    private val initialStartupTabConfig: StartupTabConfig,
     private val onClearStatusBarCache: () -> Boolean,
     private val onReapplyStatusBar: () -> Unit,
     private val onManualAutoSignIn: () -> Unit,
-    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig) -> Unit,
+    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig, StartupTabConfig) -> Unit,
     private val onClose: () -> Unit,
 ) {
     private var statusBarConfig = initialStatusBarConfig
     private var bottomTabConfig = initialBottomTabConfig
     private var readerFontConfig = initialReaderFontConfig
     private var autoSignInConfig = initialAutoSignInConfig
+    private var startupTabConfig = initialStartupTabConfig
     private var statusBarExpanded = false
     private var autoSignInExpanded = false
     private var readerFontExpanded = false
+    private var startupTabExpanded = false
     private var bottomTabExpanded = false
 
     private val bottomTabEditorPanel = BottomTabEditorPanel(
@@ -71,6 +77,7 @@ internal class ModuleSettingsPanel(
             addStatusBarSection(content, ::renderPanel)
             addAutoSignInSection(content, ::renderPanel)
             addReaderFontSection(content, ::renderPanel)
+            addStartupTabSection(content, ::renderPanel)
             addBottomTabSection(content, ::renderPanel)
 
             val scrollView = ScrollView(activity).apply {
@@ -84,7 +91,7 @@ internal class ModuleSettingsPanel(
                 bottomTabEditorPanel.createFooter(
                     onResetClick = { renderPanel() },
                     onSaveClick = {
-                        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig)
+                        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig)
                         onClose()
                     },
                 ),
@@ -201,6 +208,42 @@ internal class ModuleSettingsPanel(
                     renderPanel()
                 },
             ),
+        )
+    }
+
+    private fun addStartupTabSection(content: LinearLayout, renderPanel: () -> Unit) {
+        val section = StartupTabSettingsSection(activity, theme)
+        content.addView(
+            section.createView(
+                StartupTabSettingsSection.UiState(
+                    enabled = startupTabConfig.enabled,
+                    expanded = startupTabExpanded,
+                    tabKey = startupTabConfig.tabKey,
+                ),
+                object : StartupTabSettingsSection.Callbacks {
+                    override fun onEnabledChanged(enabled: Boolean) {
+                        startupTabConfig = startupTabConfig.copy(
+                            enabled = enabled,
+                            version = StartupTabConfigStore.nextVersion(startupTabConfig),
+                        )
+                        renderPanel()
+                    }
+
+                    override fun onTabChanged(tabKey: String) {
+                        startupTabConfig = startupTabConfig.copy(
+                            tabKey = tabKey,
+                            version = StartupTabConfigStore.nextVersion(startupTabConfig),
+                        )
+                        renderPanel()
+                    }
+
+                    override fun onExpandedChanged(expanded: Boolean) {
+                        startupTabExpanded = expanded
+                        renderPanel()
+                    }
+                },
+            ),
+            sectionParams(),
         )
     }
 

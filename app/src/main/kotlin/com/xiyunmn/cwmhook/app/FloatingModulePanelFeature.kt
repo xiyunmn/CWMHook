@@ -10,6 +10,8 @@ import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
+import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
@@ -31,6 +33,7 @@ object FloatingModulePanelFeature {
     private val hookInstaller = FloatingPanelHookInstaller(
         logTag = TAG,
         onFragmentEntryReady = ::attachLongPressEntry,
+        onBookShelfEntryReady = ::attachBookShelfLongPressEntry,
         onMainFrameActivityReady = ::attachMainFrameEntry,
         isBackKey = FloatingPanelWindow::isBackKey,
         hasPanel = FloatingPanelWindow::hasPanel,
@@ -50,6 +53,13 @@ object FloatingModulePanelFeature {
     private fun attachLongPressEntry(fragment: Any) {
         val anchor = entryResolver.fragmentAnchor(fragment) ?: return
         attachLongPressEntry(anchor, "fragment:initView") {
+            entryResolver.findActivity(anchor.context) ?: entryResolver.fragmentActivity(fragment)
+        }
+    }
+
+    private fun attachBookShelfLongPressEntry(fragment: Any) {
+        val anchor = entryResolver.bookShelfAnchor(fragment) ?: return
+        attachLongPressEntry(anchor, "bookshelf:onCreateView") {
             entryResolver.findActivity(anchor.context) ?: entryResolver.fragmentActivity(fragment)
         }
     }
@@ -101,6 +111,7 @@ object FloatingModulePanelFeature {
             initialBottomTabConfig = BottomTabConfigStore.readLocal(activity),
             initialReaderFontConfig = ReaderFontConfigStore.readLocal(activity),
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
+            initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
             onClearStatusBarCache = {
                 ImmersiveStatusBarFeature.clearColorCache(activity)
             },
@@ -110,8 +121,8 @@ object FloatingModulePanelFeature {
             onManualAutoSignIn = {
                 AutoSignInFeature.triggerManual(activity)
             },
-            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig ->
-                saveAllConfigs(activity, statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig)
+            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig ->
+                saveAllConfigs(activity, statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig)
             },
             onClose = {
                 FloatingPanelWindow.close(overlay, "save") { reason -> onPanelClosed(activity, reason) }
@@ -125,16 +136,18 @@ object FloatingModulePanelFeature {
         bottomTabConfig: BottomTabConfig,
         readerFontConfig: ReaderFontConfig,
         autoSignInConfig: AutoSignInConfig,
+        startupTabConfig: StartupTabConfig,
     ) {
         val statusBarSaved = StatusBarConfigStore.writeLocal(activity, statusBarConfig)
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
         val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
+        val startupTabSaved = StartupTabConfigStore.writeLocal(activity, startupTabConfig)
 
         BottomTabFeature.applyRuntimeConfig(activity, bottomTabConfig, "floating panel")
 
-        val message = if (statusBarSaved && bottomTabSaved && readerFontSaved && autoSignInSaved) {
-            "已保存，底栏已应用"
+        val message = if (statusBarSaved && bottomTabSaved && readerFontSaved && autoSignInSaved && startupTabSaved) {
+            "已保存，底栏已应用，启动默认 Tab 下次进入生效"
         } else {
             "部分配置保存失败，请查看日志"
         }

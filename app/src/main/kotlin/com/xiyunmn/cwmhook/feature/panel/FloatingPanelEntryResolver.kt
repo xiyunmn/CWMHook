@@ -13,6 +13,10 @@ internal class FloatingPanelEntryResolver {
         return readField(fragment, "fenleiView") as? View ?: findAnimationView(fragment)
     }
 
+    fun bookShelfAnchor(fragment: Any): View? {
+        return readField(fragment, "moreLay") as? View ?: readField(fragment, "moreImg") as? View
+    }
+
     fun mainFrameAnchor(activity: Activity): View? {
         val id = activity.resources.getIdentifier(CiweiMaoIds.FLOATING_ENTRY, "id", CiweiMaoPackages.NOVEL)
         if (id == 0) {

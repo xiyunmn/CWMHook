@@ -37,3 +37,13 @@ object CiweiMaoIds {
     const val PAGER = "pager"
     const val PAGER_1 = "pager1"
 }
+
+object CiweiMaoMembers {
+    const val DG_FRAME_INIT_WIDGETS = "initWidgets"
+    const val DG_FRAME_START_POS = "pos"
+}
+
+object CiweiMaoIntentExtras {
+    const val POS = "pos"
+    const val FROM = "from"
+}
