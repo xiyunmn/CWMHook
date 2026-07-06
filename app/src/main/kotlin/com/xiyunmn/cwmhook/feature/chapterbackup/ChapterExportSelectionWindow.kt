@@ -3,7 +3,6 @@ package com.xiyunmn.cwmhook.feature.chapterbackup
 import android.app.Activity
 import android.app.Dialog
 import android.content.Context
-import android.content.res.Configuration
 import android.os.Build
 import android.graphics.Color
 import android.graphics.Typeface
@@ -23,6 +22,7 @@ import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.AbsListView
@@ -36,9 +36,10 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
+import com.xiyunmn.cwmhook.core.hostui.HostSkinPalette
+import com.xiyunmn.cwmhook.core.hostui.HostSkinResolver
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
-import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import java.util.Locale
 
 internal class ChapterExportSelectionWindow(
@@ -72,6 +73,7 @@ internal class ChapterExportSelectionWindow(
     private var pendingThemeRefreshReason = ""
     private val activeDownloadType: String?
         get() = downloadType ?: restoreState?.downloadType
+    private val pageInterpolator = AccelerateDecelerateInterpolator()
     private val expandCollapseInterpolator = DecelerateInterpolator()
     private val themeRefreshRunnable = Runnable {
         refreshTheme(pendingThemeRefreshReason.ifBlank { "SkinChangeHelper" })
@@ -159,10 +161,13 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun configureWindow(window: Window) {
-        window.setBackgroundDrawable(ColorDrawable(theme.mainBackground))
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.attributes = window.attributes.apply {
+            windowAnimations = 0
+        }
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        window.decorView.setBackgroundColor(theme.mainBackground)
+        window.decorView.setBackgroundColor(Color.TRANSPARENT)
         window.decorView.isClickable = true
         applySystemBars(window)
     }
@@ -1009,6 +1014,7 @@ internal class ChapterExportSelectionWindow(
         root.animate()
             .translationX(root.width.toFloat())
             .setDuration(PAGE_ANIM_MS)
+            .setInterpolator(pageInterpolator)
             .withEndAction {
                 currentDialog.dismiss()
             }
@@ -1021,6 +1027,7 @@ internal class ChapterExportSelectionWindow(
             root.animate()
                 .translationX(0f)
                 .setDuration(PAGE_ANIM_MS)
+                .setInterpolator(pageInterpolator)
                 .start()
         }
     }
@@ -1032,8 +1039,8 @@ internal class ChapterExportSelectionWindow(
         }
         val first = if (::listView.isInitialized) listView.firstVisiblePosition else 0
         theme = HostPageTheme.from(activity)
-        currentDialog.window?.setBackgroundDrawable(ColorDrawable(theme.mainBackground))
-        currentDialog.window?.decorView?.setBackgroundColor(theme.mainBackground)
+        currentDialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        currentDialog.window?.decorView?.setBackgroundColor(Color.TRANSPARENT)
         val root = createRoot()
         rootView = root
         currentDialog.setContentView(root)
@@ -1473,17 +1480,7 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun hostDrawableId(name: String): Int {
-        return hostDrawableId(skinnedNames(name, theme.skinKey))
-    }
-
-    private fun hostDrawableId(names: List<String>): Int {
-        names.forEach { candidate ->
-            val id = activity.resources.getIdentifier(candidate, "drawable", activity.packageName)
-            if (id != 0) {
-                return id
-            }
-        }
-        return 0
+        return HostSkinResolver.skinnedDrawableId(activity, name, theme.skinKey)
     }
 
     private fun formatBytes(bytes: Long, selectedCount: Int): String {
@@ -1575,61 +1572,33 @@ internal class ChapterExportSelectionWindow(
     ) {
         companion object {
             fun from(context: Context): HostPageTheme {
-                val skinKey = currentSkinKey(context)
-                val night = skinKey == "night"
-                val neutralMain = ChapterBackupSkinBridge.neutralBackground(night)
-                val neutralPanel = ChapterBackupSkinBridge.neutralPanel(night)
-                val primary = hostColor(context, "textTitle", if (night) 0xFFCCCCCC.toInt() else Color.BLACK)
-                val secondary = hostColor(context, "text_666", if (night) 0xFF999999.toInt() else 0xFF666666.toInt())
-                val titleRight = hostColor(context, "color_title_textright", primary)
-                val accent = hostColor(context, "text_base_color", titleRight)
+                val host = HostSkinPalette.from(context)
                 return HostPageTheme(
-                    skinKey = skinKey,
-                    mainBackground = hostColor(context, "color_bg_main", neutralMain),
-                    rowBackground = hostColor(context, "color_bg_1", neutralPanel),
-                    catalogBackground = hostColor(context, "color_bg_catalog", neutralMain),
-                    titleBackground = hostColor(context, "color_title_bg1", neutralPanel),
-                    titleText = hostColor(context, "color_title_text1", primary),
-                    titleRightText = titleRight,
-                    primaryText = primary,
-                    secondaryText = secondary,
-                    tertiaryText = if (night) 0xFF777777.toInt() else 0xFF999999.toInt(),
-                    sectionText = hostColor(context, "text_3797cc", primary),
-                    accentText = accent,
-                    divider = hostColor(context, "divider", if (night) 0xFF161616.toInt() else 0xFFE6E6E6.toInt()),
-                    buttonText = hostColor(context, "btn_cumText", if (night) Color.BLACK else Color.WHITE),
-                    buttonFallback = hostColor(context, "color_base", accent),
-                    buttonDisabled = if (night) 0xFF4C4C4C.toInt() else 0xFFDDDDDD.toInt(),
-                    selectedDrawable = hostDrawableId(context, "selected"),
-                    unselectedDrawable = hostDrawableId(context, "select").takeIf { it != 0 }
-                        ?: hostDrawableId(context, "select_grey"),
+                    skinKey = host.skinKey,
+                    mainBackground = host.mainBackground,
+                    rowBackground = host.rowBackground,
+                    catalogBackground = host.catalogBackground,
+                    titleBackground = host.titleBackground,
+                    titleText = host.titleText,
+                    titleRightText = host.titleRightText,
+                    primaryText = host.primaryText,
+                    secondaryText = host.secondaryText,
+                    tertiaryText = host.tertiaryText,
+                    sectionText = host.sectionText,
+                    accentText = host.accentText,
+                    divider = host.divider,
+                    buttonText = host.buttonText,
+                    buttonFallback = host.accent,
+                    buttonDisabled = if (host.night) 0xFF4C4C4C.toInt() else 0xFFDDDDDD.toInt(),
+                    selectedDrawable = hostDrawableId(context, "selected", host.skinKey),
+                    unselectedDrawable = hostDrawableId(context, "select", host.skinKey).takeIf { it != 0 }
+                        ?: hostDrawableId(context, "select_grey", host.skinKey),
                     buttonDrawable = 0,
                 )
             }
 
-            private fun currentSkinKey(context: Context): String {
-                val settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-                val followSystem = settings.getBoolean("IsfollowNight", false)
-                val isNight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && followSystem) {
-                    context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                        Configuration.UI_MODE_NIGHT_YES
-                } else {
-                    context.getSharedPreferences(CiweiMaoPackages.DEFAULT_PREF, Context.MODE_PRIVATE)
-                        .getBoolean("isNight", false)
-                }
-                return if (isNight) {
-                    "night"
-                } else {
-                    settings.getString("skinType", "yellow") ?: "yellow"
-                }
-            }
-
-            private fun hostColor(context: Context, name: String, fallback: Int): Int {
-                return ChapterBackupSkinBridge.color(context, name, fallback)
-            }
-
-            private fun hostDrawableId(context: Context, name: String): Int {
-                return ChapterBackupSkinBridge.drawableId(context, name)
+            private fun hostDrawableId(context: Context, name: String, skinKey: String): Int {
+                return HostSkinResolver.skinnedDrawableId(context, name, skinKey)
             }
         }
     }
@@ -1753,14 +1722,6 @@ internal class ChapterExportSelectionWindow(
         private fun String.isCatalogActivityName(): Boolean {
             return this == CiweiMaoClasses.CATALOG_ACTIVITY || this == CiweiMaoClasses.CATALOG_ACTIVITY_LANDSCAPE
         }
-    }
-}
-
-private fun skinnedNames(name: String, skinKey: String): List<String> {
-    return when (skinKey) {
-        "night" -> listOf("${name}_night", name)
-        "green", "pink" -> listOf("${name}_$skinKey", name)
-        else -> listOf(name)
     }
 }
 

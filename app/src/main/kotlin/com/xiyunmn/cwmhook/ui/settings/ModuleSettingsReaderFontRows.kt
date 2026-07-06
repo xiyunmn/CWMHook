@@ -113,17 +113,6 @@ internal class ModuleSettingsReaderFontRows(
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         row.addView(
             FrameLayout(activity).apply {
-                if (selected) {
-                    addView(
-                        InlineIconView(activity, IconType.RADIO_SELECTED, theme.accent),
-                        FrameLayout.LayoutParams(dp(activity, 36), dp(activity, 36), Gravity.CENTER),
-                    )
-                }
-            },
-            LinearLayout.LayoutParams(dp(activity, 44), ViewGroup.LayoutParams.MATCH_PARENT),
-        )
-        row.addView(
-            FrameLayout(activity).apply {
                 isClickable = true
                 addView(
                     InlineIconView(activity, IconType.DELETE, theme.accent),

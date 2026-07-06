@@ -1,36 +1,16 @@
 package com.xiyunmn.cwmhook.feature.chapterbackup
 
 import android.content.Context
-import android.graphics.Color
-import android.os.Build
 import android.view.View
+import com.xiyunmn.cwmhook.core.hostui.HostSkinResolver
 
 internal object ChapterBackupSkinBridge {
     fun color(context: Context, name: String, fallback: Int): Int {
-        val id = resourceId(context, name, "color")
-        if (id == 0) {
-            return fallback
-        }
-        currentResourceProvider(context)?.let { provider ->
-            runCatching {
-                provider.javaClass
-                    .getMethod("f", Int::class.javaPrimitiveType, String::class.java)
-                    .invoke(provider, id, name) as Int
-            }.onSuccess { return it }
-        }
-        return runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                context.resources.getColor(id, context.theme)
-            } else {
-                @Suppress("DEPRECATION")
-                context.resources.getColor(id)
-            }
-        }.getOrDefault(fallback)
+        return HostSkinResolver.color(context, name, fallback)
     }
 
     fun drawableId(context: Context, name: String): Int {
-        return resourceId(context, name, "drawable").takeIf { it != 0 }
-            ?: resourceId(context, name, "mipmap")
+        return HostSkinResolver.drawableId(context, name)
     }
 
     fun applyAttr(view: View, attr: String, resId: Int) {
@@ -59,23 +39,4 @@ internal object ChapterBackupSkinBridge {
         }
     }
 
-    fun neutralBackground(night: Boolean): Int {
-        return if (night) 0xFF222222.toInt() else 0xFFF7F7F7.toInt()
-    }
-
-    fun neutralPanel(night: Boolean): Int {
-        return if (night) 0xFF353535.toInt() else Color.WHITE
-    }
-
-    private fun resourceId(context: Context, name: String, type: String): Int {
-        return context.resources.getIdentifier(name, type, context.packageName)
-    }
-
-    private fun currentResourceProvider(context: Context): Any? {
-        return runCatching {
-            val managerClass = Class.forName("org.qcode.qskinloader.o.d", false, context.classLoader)
-            val manager = managerClass.getMethod("h").invoke(null)
-            manager.javaClass.getMethod("i").invoke(manager)
-        }.getOrNull()
-    }
 }

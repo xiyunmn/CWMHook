@@ -5,7 +5,6 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -22,6 +21,7 @@ import android.view.DragEvent
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.RelativeLayout
@@ -29,9 +29,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.core.hostui.HostSkinResolver
 import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
-import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import java.io.File
 import java.util.Locale
 import kotlin.math.min
@@ -429,12 +429,16 @@ internal class ReaderFontSettingsInjector(
                 addRule(RelativeLayout.CENTER_VERTICAL)
             },
         )
+        val selectedDrawable = skinnedDrawableId(activity, "selected", palette.skinKey)
         row.addView(
-            ReaderFontIconView(activity, ReaderFontIconKind.RADIO_SELECTED, palette.accent).apply {
+            ImageView(activity).apply {
                 tag = customCheckTagPrefix + path
                 visibility = View.GONE
+                if (selectedDrawable != 0) {
+                    setImageResource(selectedDrawable)
+                }
             },
-            RelativeLayout.LayoutParams(dp(activity, 36), dp(activity, 36)).apply {
+            RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
                 addRule(RelativeLayout.CENTER_VERTICAL)
                 rightMargin = dp(activity, 16)
@@ -917,75 +921,31 @@ internal class ReaderFontSettingsInjector(
     }
 
     private fun hostPalette(context: Context): HostPalette {
-        val skinKey = currentSkinKey(context)
+        val skinKey = HostSkinResolver.currentSkinKey(context)
         val night = skinKey == "night"
         return HostPalette(
             skinKey = skinKey,
-            rowBackground = skinnedHostColor(context, "color_bg_1", skinKey, if (night) Color.rgb(53, 53, 53) else Color.WHITE),
-            titleText = skinnedHostColor(context, "textTitle", skinKey, if (night) Color.rgb(204, 204, 204) else Color.BLACK),
+            rowBackground = HostSkinResolver.skinnedColor(context, "color_bg_1", skinKey, if (night) Color.rgb(53, 53, 53) else Color.WHITE),
+            titleText = HostSkinResolver.skinnedColor(context, "textTitle", skinKey, if (night) Color.rgb(204, 204, 204) else Color.BLACK),
             subText = if (night) Color.rgb(138, 138, 138) else 0xFF828282.toInt(),
             accent = if (night) {
-                hostColor(context, listOf("color_base_night"), Color.rgb(88, 88, 88))
+                HostSkinResolver.color(context, "color_base_night", Color.rgb(88, 88, 88))
             } else {
-                skinnedHostColor(context, "color_base", skinKey, 0xFFF9BE00.toInt())
+                HostSkinResolver.skinnedColor(context, "color_base", skinKey, 0xFFF9BE00.toInt())
             },
         )
     }
 
-    private fun skinnedHostColor(context: Context, name: String, skinKey: String, fallback: Int): Int {
-        return hostColor(context, skinnedNames(name, skinKey), fallback)
-    }
-
-    private fun hostColor(context: Context, names: List<String>, fallback: Int): Int {
-        names.forEach { name ->
-            val id = context.resources.getIdentifier(name, "color", context.packageName)
-            if (id != 0) {
-                return runCatching { context.resources.getColor(id, context.theme) }.getOrDefault(fallback)
-            }
-        }
-        return fallback
-    }
-
-    private fun currentSkinKey(context: Context): String {
-        val settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val followSystem = settings.getBoolean("IsfollowNight", false)
-        val isNight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && followSystem) {
-            context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        } else {
-            context.getSharedPreferences(CiweiMaoPackages.DEFAULT_PREF, Context.MODE_PRIVATE).getBoolean("isNight", false)
-        }
-        return if (isNight) {
-            "night"
-        } else {
-            settings.getString("skinType", "yellow") ?: "yellow"
-        }
-    }
-
-    private fun skinnedNames(name: String, skinKey: String): List<String> {
-        return when (skinKey) {
-            "night" -> listOf("${name}_night", name)
-            "green", "pink" -> listOf("${name}_$skinKey", name)
-            else -> listOf(name)
-        }
+    private fun skinnedDrawableId(context: Context, name: String, skinKey: String): Int {
+        return HostSkinResolver.skinnedDrawableId(context, name, skinKey)
     }
 
     private fun skinnedButtonDrawableId(context: Context, skinKey: String): Int {
-        val names = if (skinKey == "night") {
-            listOf("btn_base_round5_night")
+        return if (skinKey == "night") {
+            HostSkinResolver.drawableId(context, "btn_base_round5_night")
         } else {
-            skinnedNames("btn_base_round5", skinKey)
+            HostSkinResolver.skinnedDrawableId(context, "btn_base_round5", skinKey)
         }
-        return hostDrawableId(context, names)
-    }
-
-    private fun hostDrawableId(context: Context, names: List<String>): Int {
-        names.forEach { candidate ->
-            val id = context.resources.getIdentifier(candidate, "drawable", context.packageName)
-            if (id != 0) {
-                return id
-            }
-        }
-        return 0
     }
 
     private fun constrainReaderMenuFontLabel(root: View, textView: TextView) {

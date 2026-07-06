@@ -16,6 +16,7 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
+import com.xiyunmn.cwmhook.core.hostui.HostSkinPalette
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
@@ -95,10 +96,11 @@ internal class ChapterBackupHookInstaller(
         val downIndex = parent.indexOfChild(downLay).takeIf { it >= 0 } ?: return
         val labelColor = ((fragment.declaredField("tv2") as? TextView)?.currentTextColor)
             ?: ChapterBackupSkinBridge.color(activity, "text_333333", Color.BLACK)
+        val iconColor = HostSkinPalette.from(activity).accent
         val sourceDivider = fragment.declaredField("divView") as? View
         val restoredBookInfo = fragment.catalogBookInfo()
         val restoredDownloadType = fragment.catalogDownloadType()
-        val exportLay = createCatalogExportEntry(activity, labelColor) {
+        val exportLay = createCatalogExportEntry(activity, labelColor, iconColor) {
             val bookInfo = fragment.catalogBookInfo()
             val downloadType = fragment.catalogDownloadType()
             val currentExporter = exporter
@@ -137,7 +139,8 @@ internal class ChapterBackupHookInstaller(
 
     private fun createCatalogExportEntry(
         activity: Activity,
-        color: Int,
+        labelColor: Int,
+        iconColor: Int,
         onClick: () -> Unit,
     ): RelativeLayout {
         return RelativeLayout(activity).apply {
@@ -153,7 +156,7 @@ internal class ChapterBackupHookInstaller(
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     addView(
-                        CatalogExportIconView(activity, color),
+                        CatalogExportIconView(activity, iconColor),
                         LinearLayout.LayoutParams(dp(activity, 24), dp(activity, 24)),
                     )
                     addView(
@@ -161,7 +164,7 @@ internal class ChapterBackupHookInstaller(
                             text = "章节导出"
                             textSize = 14f
                             gravity = Gravity.CENTER
-                            setTextColor(color)
+                            setTextColor(labelColor)
                             includeFontPadding = false
                             val textColorId = activity.resources.getIdentifier("text_333333", "color", activity.packageName)
                             ChapterBackupSkinBridge.applyAttr(this, "textColor", textColorId)
@@ -182,17 +185,13 @@ internal class ChapterBackupHookInstaller(
     }
 
     private fun createCatalogDivider(activity: Activity, source: View?): View {
-        return LinearLayout.LayoutParams(dp(activity, 1), dp(activity, 40)).apply {
-            gravity = Gravity.CENTER_VERTICAL
-        }.let { params ->
-            View(activity).apply {
-                tag = CATALOG_EXPORT_DIVIDER_TAG
-                background = source?.background?.constantState?.newDrawable()?.mutate()
-                    ?: android.graphics.drawable.ColorDrawable(ChapterBackupSkinBridge.color(activity, "divider", Color.TRANSPARENT))
-                val dividerId = activity.resources.getIdentifier("divider", "color", activity.packageName)
-                ChapterBackupSkinBridge.applyAttr(this, "background", dividerId)
-                layoutParams = params
+        val params = source?.layoutParams?.let { cloneLayoutParams(it) }
+            ?: LinearLayout.LayoutParams(dp(activity, 1), dp(activity, 40)).apply {
+                gravity = Gravity.CENTER_VERTICAL
             }
+        return CatalogDividerView(activity, source).apply {
+            tag = CATALOG_EXPORT_DIVIDER_TAG
+            layoutParams = params
         }
     }
 
@@ -391,7 +390,7 @@ internal class ChapterBackupHookInstaller(
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            paint.color = ChapterBackupSkinBridge.color(context, "text_333333", fallbackColor)
+            paint.color = HostSkinPalette.from(context).accent.takeIf { it != 0 } ?: fallbackColor
             paint.strokeWidth = (2f * resources.displayMetrics.density).coerceAtLeast(1f)
             paint.strokeCap = Paint.Cap.ROUND
             paint.strokeJoin = Paint.Join.ROUND
@@ -404,6 +403,35 @@ internal class ChapterBackupHookInstaller(
                 cy = height / 2f,
                 size = min(width, height) * 0.72f,
             )
+        }
+    }
+
+    private class CatalogDividerView(
+        context: Context,
+        private val source: View?,
+    ) : View(context) {
+        private var lastSourceBackground: android.graphics.drawable.Drawable? = null
+
+        override fun draw(canvas: Canvas) {
+            syncWithSource()
+            super.draw(canvas)
+        }
+
+        private fun syncWithSource() {
+            val current = source?.background
+            alpha = source?.alpha ?: 1f
+            if (current == null) {
+                if (background == null) {
+                    background = android.graphics.drawable.ColorDrawable(HostSkinPalette.from(context).divider)
+                }
+                return
+            }
+            if (current === lastSourceBackground) {
+                return
+            }
+            lastSourceBackground = current
+            background = current.constantState?.newDrawable()?.mutate()
+                ?: android.graphics.drawable.ColorDrawable(HostSkinPalette.from(context).divider)
         }
     }
 
