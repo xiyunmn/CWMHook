@@ -13,6 +13,8 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
 class CiweiMaoHookModule : XposedModule() {
     private var processName: String = ""
+    @Volatile
+    private var applicationReadyRetried = false
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         XposedCompat.attach(this)
@@ -49,29 +51,33 @@ class CiweiMaoHookModule : XposedModule() {
         }
         val hooked = XposedCompat.interceptProtective(this, onCreate, "$TAG.Application.onCreate") { chain ->
             val application = chain.thisObject as? Application
+            val applicationName = chain.thisObject.javaClass.name
             if (application != null) {
                 ModuleFileLogger.init(application, processName)
             }
             log(
                 Log.INFO,
                 TAG,
-                "Application.onCreate: ${chain.thisObject.javaClass.name}"
+                "Application.onCreate: $applicationName"
             )
-            ModuleFileLogger.i(TAG, "Application.onCreate begin: ${chain.thisObject.javaClass.name}")
+            ModuleFileLogger.i(TAG, "Application.onCreate begin: $applicationName")
             try {
                 val result = chain.proceed()
-                HookInstaller.install(
-                    CiweiMaoHookPlanner.applicationReadyRetryPlan(
-                        module = this,
-                        processName = processName,
-                        reason = "Application.onCreate",
-                    ),
-                    classLoader,
-                )
-                ModuleFileLogger.i(TAG, "Application.onCreate end: ${chain.thisObject.javaClass.name}")
+                if (!applicationReadyRetried) {
+                    applicationReadyRetried = true
+                    HookInstaller.install(
+                        CiweiMaoHookPlanner.applicationReadyRetryPlan(
+                            module = this,
+                            processName = processName,
+                            reason = "Application.onCreate:$applicationName",
+                        ),
+                        classLoader,
+                    )
+                }
+                ModuleFileLogger.i(TAG, "Application.onCreate end: $applicationName")
                 result
             } catch (throwable: Throwable) {
-                ModuleFileLogger.e(TAG, "Application.onCreate failed: ${chain.thisObject.javaClass.name}", throwable)
+                ModuleFileLogger.e(TAG, "Application.onCreate failed: $applicationName", throwable)
                 throw throwable
             }
         }

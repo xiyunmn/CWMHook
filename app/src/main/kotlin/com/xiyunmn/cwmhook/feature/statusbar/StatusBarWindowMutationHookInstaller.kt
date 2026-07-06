@@ -22,10 +22,17 @@ internal class StatusBarWindowMutationHookInstaller(
     }
 
     private fun hookStatusBarColor(module: XposedModule) {
+        val method = runCatching {
+            Class.forName(PHONE_WINDOW_CLASS)
+                .getDeclaredMethod("setStatusBarColor", Int::class.javaPrimitiveType)
+                .also { it.isAccessible = true }
+        }.getOrElse {
+            return
+        }
         XposedCompat.interceptProtective(
             module,
-            Window::class.java.getDeclaredMethod("setStatusBarColor", Int::class.javaPrimitiveType),
-            "$logTag.Window.setStatusBarColor",
+            method,
+            "$logTag.PhoneWindow.setStatusBarColor",
         ) { chain ->
             val window = chain.thisObject as? Window
             val color = chain.getArg(0) as? Int
@@ -37,12 +44,12 @@ internal class StatusBarWindowMutationHookInstaller(
                 shouldManageWindow(window)
             ) {
                 ensureTransparentStatusBarColor(window)
-                applyIfNeeded(window, "Window.setStatusBarColor")
+                applyIfNeeded(window, "PhoneWindow.setStatusBarColor")
                 null
             } else {
                 val result = chain.proceed()
                 if (!isApplying()) {
-                    window?.let { applyIfNeeded(it, "Window.setStatusBarColor") }
+                    window?.let { applyIfNeeded(it, "PhoneWindow.setStatusBarColor") }
                 }
                 result
             }
@@ -90,5 +97,9 @@ internal class StatusBarWindowMutationHookInstaller(
             val view = chain.thisObject as? View ?: return@hookAfter
             windowRegistry.findActivity(view.context)?.let { applyIfNeeded(it.window, "View.setSystemUiVisibility") }
         }
+    }
+
+    private companion object {
+        const val PHONE_WINDOW_CLASS = "com.android.internal.policy.PhoneWindow"
     }
 }

@@ -5,6 +5,7 @@ import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
+import com.xiyunmn.cwmhook.feature.startupopt.StartupOptimizeFeature
 import com.xiyunmn.cwmhook.feature.startuptab.StartupTabFeature
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
 import io.github.libxposed.api.XposedModule
@@ -20,6 +21,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("BottomTabFeature.install") { classLoader ->
                     BottomTabFeature.install(module, classLoader)
+                },
+                HookInstallEntry("StartupOptimizeFeature.install") { classLoader ->
+                    StartupOptimizeFeature.install(module, classLoader)
                 },
                 HookInstallEntry("StartupTabFeature.install") { classLoader ->
                     StartupTabFeature.install(module, classLoader)
@@ -54,6 +58,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("BottomTabFeature.retryDeferredHooks") { classLoader ->
                     BottomTabFeature.retryDeferredHooks(module, classLoader, reason)
+                },
+                HookInstallEntry("StartupOptimizeFeature.retryDeferredHooks") { classLoader ->
+                    StartupOptimizeFeature.retryDeferredHooks(module, classLoader, reason)
                 },
                 HookInstallEntry("StartupTabFeature.retryDeferredHooks") { classLoader ->
                     StartupTabFeature.retryDeferredHooks(module, classLoader, reason)

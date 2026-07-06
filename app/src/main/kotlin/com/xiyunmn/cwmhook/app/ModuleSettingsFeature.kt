@@ -14,6 +14,8 @@ import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
+import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
@@ -155,6 +157,7 @@ object ModuleSettingsFeature {
             initialBottomTabConfig = BottomTabConfigStore.readLocal(activity),
             initialReaderFontConfig = ReaderFontConfigStore.readLocal(activity),
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
+            initialStartupOptimizeConfig = StartupOptimizeConfigStore.readLocal(activity),
             initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
             initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
             restoreState = restoreState as? ModuleSettingsPage.RestoreState,
@@ -173,13 +176,20 @@ object ModuleSettingsFeature {
             onExportCachedChapters = {
                 ChapterBackupFeature.exportCachedBooks(activity)
             },
-            onSave = { statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig, chapterBackupConfig ->
+            onSave = { statusBarConfig,
+                    bottomTabConfig,
+                    readerFontConfig,
+                    autoSignInConfig,
+                    startupOptimizeConfig,
+                    startupTabConfig,
+                    chapterBackupConfig ->
                 saveAllConfigs(
                     activity,
                     statusBarConfig,
                     bottomTabConfig,
                     readerFontConfig,
                     autoSignInConfig,
+                    startupOptimizeConfig,
                     startupTabConfig,
                     chapterBackupConfig,
                 )
@@ -199,6 +209,7 @@ object ModuleSettingsFeature {
         bottomTabConfig: BottomTabConfig,
         readerFontConfig: ReaderFontConfig,
         autoSignInConfig: AutoSignInConfig,
+        startupOptimizeConfig: StartupOptimizeConfig,
         startupTabConfig: StartupTabConfig,
         chapterBackupConfig: ChapterBackupConfig,
     ) {
@@ -206,6 +217,7 @@ object ModuleSettingsFeature {
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
         val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
+        val startupOptimizeSaved = StartupOptimizeConfigStore.writeLocal(activity, startupOptimizeConfig)
         val startupTabSaved = StartupTabConfigStore.writeLocal(activity, startupTabConfig)
         val chapterBackupSaved = ChapterBackupConfigStore.writeLocal(
             activity,
@@ -219,10 +231,11 @@ object ModuleSettingsFeature {
             bottomTabSaved &&
             readerFontSaved &&
             autoSignInSaved &&
+            startupOptimizeSaved &&
             startupTabSaved &&
             chapterBackupSaved
         ) {
-            "已保存，底栏已应用，启动默认 Tab 下次进入生效"
+            "已保存，底栏已应用，启动相关设置下次启动生效"
         } else {
             "部分配置保存失败，请查看日志"
         }

@@ -19,6 +19,8 @@ import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
+import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
@@ -38,6 +40,7 @@ internal class ModuleSettingsPage(
     initialBottomTabConfig: BottomTabConfig,
     initialReaderFontConfig: ReaderFontConfig,
     initialAutoSignInConfig: AutoSignInConfig,
+    initialStartupOptimizeConfig: StartupOptimizeConfig,
     initialStartupTabConfig: StartupTabConfig,
     initialChapterBackupConfig: ChapterBackupConfig,
     restoreState: RestoreState? = null,
@@ -46,7 +49,15 @@ internal class ModuleSettingsPage(
     private val onChooseChapterBackupDirectory: () -> Unit,
     private val onClearChapterBackupDirectory: () -> Boolean,
     private val onExportCachedChapters: () -> Unit,
-    private val onSave: (StatusBarConfig, BottomTabConfig, ReaderFontConfig, AutoSignInConfig, StartupTabConfig, ChapterBackupConfig) -> Unit,
+    private val onSave: (
+        StatusBarConfig,
+        BottomTabConfig,
+        ReaderFontConfig,
+        AutoSignInConfig,
+        StartupOptimizeConfig,
+        StartupTabConfig,
+        ChapterBackupConfig,
+    ) -> Unit,
     private val onRestartHost: () -> Unit,
     private val onClose: (String) -> Unit,
 ) : LinearLayout(activity), ModuleSettingsPageWindow.RestorablePage {
@@ -54,6 +65,7 @@ internal class ModuleSettingsPage(
     private var bottomTabConfig = restoreState?.bottomTabConfig ?: initialBottomTabConfig
     private var readerFontConfig = restoreState?.readerFontConfig ?: initialReaderFontConfig
     private var autoSignInConfig = restoreState?.autoSignInConfig ?: initialAutoSignInConfig
+    private var startupOptimizeConfig = restoreState?.startupOptimizeConfig ?: initialStartupOptimizeConfig
     private var startupTabConfig = restoreState?.startupTabConfig ?: initialStartupTabConfig
     private var chapterBackupConfig = restoreState?.chapterBackupConfig ?: initialChapterBackupConfig
     private var bottomTabState = BottomTabPanelState.from(bottomTabConfig)
@@ -92,6 +104,7 @@ internal class ModuleSettingsPage(
             bottomTabConfig = bottomTabConfig,
             readerFontConfig = readerFontConfig,
             autoSignInConfig = autoSignInConfig,
+            startupOptimizeConfig = startupOptimizeConfig,
             startupTabConfig = startupTabConfig,
             chapterBackupConfig = chapterBackupConfig,
             pageName = currentPage.name,
@@ -203,6 +216,7 @@ internal class ModuleSettingsPage(
             Page.ChapterBackup -> renderChapterBackupPage()
             Page.ReaderFont -> renderReaderFontPage()
             Page.ReaderFontManager -> renderReaderFontManagerPage()
+            Page.StartupOptimize -> renderStartupOptimizePage()
             Page.StartupTab -> renderStartupTabPage()
             Page.BottomTab -> renderBottomTabPage()
         }
@@ -284,6 +298,20 @@ internal class ModuleSettingsPage(
         )
 
         addSectionTitle("自动化")
+        addOverviewRow(
+            title = "启动加速",
+            subtitle = startupOptimizeSummary(),
+            enabled = startupOptimizeConfig.enabled,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    enabled = !startupOptimizeConfig.enabled,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.Overview)
+            },
+            onOpen = { render(Page.StartupOptimize) },
+            icon = IconType.POWER,
+        )
         addOverviewRow(
             title = "自动签到",
             subtitle = "每日自动签到，可手动触发",
@@ -421,6 +449,66 @@ internal class ModuleSettingsPage(
         }
     }
 
+    private fun renderStartupOptimizePage() {
+        addSectionTitle("启动链路")
+        addOverviewRow(
+            title = "跳过本站开屏",
+            subtitle = "启动时不进入缓存广告或活动页",
+            enabled = startupOptimizeConfig.skipSelfSplash,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    skipSelfSplash = !startupOptimizeConfig.skipSelfSplash,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.AD,
+        )
+        addOverviewRow(
+            title = "跳过第三方开屏",
+            subtitle = "跳过 Tobid/WindMill 启动广告等待",
+            enabled = startupOptimizeConfig.skipThirdPartySplash,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    skipThirdPartySplash = !startupOptimizeConfig.skipThirdPartySplash,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.PLAY,
+        )
+        addOverviewRow(
+            title = "禁用启动页预取",
+            subtitle = "停止拉取和下载下次开屏素材",
+            enabled = startupOptimizeConfig.disableStartPagePrefetch,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    disableStartPagePrefetch = !startupOptimizeConfig.disableStartPagePrefetch,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.DOWNLOAD,
+        )
+        addOverviewRow(
+            title = "兜底跳过开屏页",
+            subtitle = "旧开屏页出现时立即走宿主跳转",
+            enabled = startupOptimizeConfig.skipAdvertisementActivity,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    skipAdvertisementActivity = !startupOptimizeConfig.skipAdvertisementActivity,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.CHECK,
+        )
+    }
+
     private fun renderBottomTabPage() {
         addInfoRow("拖拽排序", "长按左侧拖拽柄后上下移动，点击右侧状态可显示或隐藏。")
         val container = LinearLayout(activity).apply {
@@ -501,13 +589,29 @@ internal class ModuleSettingsPage(
 
     private fun saveAndClose() {
         syncChapterBackupPathFromStore()
-        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig, chapterBackupConfig)
+        onSave(
+            statusBarConfig,
+            bottomTabConfig,
+            readerFontConfig,
+            autoSignInConfig,
+            startupOptimizeConfig,
+            startupTabConfig,
+            chapterBackupConfig,
+        )
         onClose("save")
     }
 
     private fun saveAndRestart() {
         syncChapterBackupPathFromStore()
-        onSave(statusBarConfig, bottomTabConfig, readerFontConfig, autoSignInConfig, startupTabConfig, chapterBackupConfig)
+        onSave(
+            statusBarConfig,
+            bottomTabConfig,
+            readerFontConfig,
+            autoSignInConfig,
+            startupOptimizeConfig,
+            startupTabConfig,
+            chapterBackupConfig,
+        )
         onClose("save-restart")
         activity.window.decorView.postDelayed({ onRestartHost() }, 250L)
     }
@@ -528,6 +632,7 @@ internal class ModuleSettingsPage(
         bottomTabState = BottomTabPanelState.from(bottomTabConfig)
         readerFontConfig = ReaderFontConfigStore.defaultConfig()
         autoSignInConfig = AutoSignInConfigStore.defaultConfig()
+        startupOptimizeConfig = StartupOptimizeConfigStore.defaultConfig()
         startupTabConfig = StartupTabConfigStore.defaultConfig()
         chapterBackupConfig = ChapterBackupConfigStore.defaultConfig()
         toast("已恢复默认草稿，保存后生效")
@@ -548,6 +653,19 @@ internal class ModuleSettingsPage(
         }
         val label = BottomTabConfigStore.tabByKey(startupTabConfig.tabKey)?.label ?: "书城"
         return "启动时进入：$label"
+    }
+
+    private fun startupOptimizeSummary(): String {
+        if (!startupOptimizeConfig.enabled) {
+            return "未启用"
+        }
+        val enabledItems = listOf(
+            startupOptimizeConfig.skipSelfSplash,
+            startupOptimizeConfig.skipThirdPartySplash,
+            startupOptimizeConfig.disableStartPagePrefetch,
+            startupOptimizeConfig.skipAdvertisementActivity,
+        ).count { it }
+        return "已启用 $enabledItems/4 项"
     }
 
     private fun chapterBackupPathLabel(): String {
@@ -682,6 +800,7 @@ internal class ModuleSettingsPage(
         val bottomTabConfig: BottomTabConfig,
         val readerFontConfig: ReaderFontConfig,
         val autoSignInConfig: AutoSignInConfig,
+        val startupOptimizeConfig: StartupOptimizeConfig,
         val startupTabConfig: StartupTabConfig,
         val chapterBackupConfig: ChapterBackupConfig,
         val pageName: String,
@@ -692,6 +811,7 @@ internal class ModuleSettingsPage(
         ChapterBackup("个人章节导出"),
         ReaderFont("阅读页字体自定义"),
         ReaderFontManager("管理本地字体"),
+        StartupOptimize("启动加速"),
         StartupTab("启动默认 Tab"),
         BottomTab("底栏 Tab 自定义"),
     }

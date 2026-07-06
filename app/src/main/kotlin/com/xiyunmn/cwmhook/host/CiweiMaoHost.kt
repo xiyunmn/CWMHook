@@ -6,6 +6,10 @@ object CiweiMaoPackages {
 }
 
 object CiweiMaoClasses {
+    const val SPLASH_ACTIVITY = "com.kuangxiangciweimao.novel.activity.SplashActivity"
+    const val WELCOME_ACTIVITY = "com.kuangxiangciweimao.novel.activity.WelcomeActivity"
+    const val WELCOME_ACTIVITY_HANDLER = "com.kuangxiangciweimao.novel.activity.WelcomeActivity\$1"
+    const val ADVERTISEMENT_ACTIVITY = "com.kuangxiangciweimao.novel.activity.AdvertisementActivity"
     const val MAIN_FRAME_ACTIVITY = "com.kuangxiangciweimao.novel.activity.frame.MainFrameActivity"
     const val DG_FRAME_ACTIVITY = "com.kuangxiangciweimao.novel.activity.frame.call.DGFrameActivity"
     const val RECOMMEND_FRAGMENT = "com.kuangxiangciweimao.novel.activity.frame.FragRecommendNew"
