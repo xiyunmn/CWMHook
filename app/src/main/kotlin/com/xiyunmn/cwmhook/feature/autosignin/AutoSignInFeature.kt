@@ -45,6 +45,16 @@ object AutoSignInFeature {
         if (activity.isFinishing) {
             return
         }
+        if (!activity.hasWindowFocus()) {
+            ModuleFileLogger.throttled(
+                key = "$TAG.waitFocus.${activity.javaClass.name}",
+                intervalMs = 30_000L,
+                priority = android.util.Log.INFO,
+                tag = TAG,
+                message = "Auto sign-in waits for window focus: reason=$reason, activity=${activity.javaClass.name}",
+            )
+            return
+        }
         activity.window.decorView.postDelayed(
             {
                 if (!activity.isFinishing) {

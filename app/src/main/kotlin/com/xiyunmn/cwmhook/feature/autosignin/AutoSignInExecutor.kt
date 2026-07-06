@@ -47,7 +47,7 @@ internal class AutoSignInExecutor(
     fun triggerManual(activity: Activity) {
         val appContext = appContext(activity)
         val user = bridge.currentUser() ?: run {
-            toast(appContext, "请先登录刺猬猫账号")
+            toast(activity, appContext, "请先登录刺猬猫账号")
             return
         }
         request(activity, appContext, user, AutoSignInConfigStore.today(), Trigger.MANUAL, "manual")
@@ -63,7 +63,7 @@ internal class AutoSignInExecutor(
     ) {
         if (!beginRequest()) {
             if (trigger == Trigger.MANUAL) {
-                toast(appContext, "签到请求进行中")
+                toast(activity, appContext, "签到请求进行中")
             }
             return
         }
@@ -73,7 +73,7 @@ internal class AutoSignInExecutor(
                 endRequest()
                 val message = successMessage(trigger, result)
                 AutoSignInConfigStore.recordResult(appContext, user.readerId, date, true, message)
-                toast(appContext, message)
+                toast(activity, appContext, message)
                 ModuleFileLogger.i(TAG, "Sign-in success: trigger=$trigger, reader=${user.readerId.masked()}")
             }
 
@@ -84,7 +84,7 @@ internal class AutoSignInExecutor(
                 if (trigger == Trigger.AUTO) {
                     AutoSignInConfigStore.recordResult(appContext, user.readerId, date, false, toastMessage)
                 }
-                toast(appContext, toastMessage)
+                toast(activity, appContext, toastMessage)
                 ModuleFileLogger.w(TAG, "Sign-in failed: trigger=$trigger, reader=${user.readerId.masked()}, message=$cleanMessage")
             }
 
@@ -94,7 +94,7 @@ internal class AutoSignInExecutor(
                 if (trigger == Trigger.AUTO) {
                     AutoSignInConfigStore.recordResult(appContext, user.readerId, date, false, toastMessage)
                 }
-                toast(appContext, toastMessage)
+                toast(activity, appContext, toastMessage)
                 ModuleFileLogger.w(TAG, "Sign-in network unavailable: trigger=$trigger, reader=${user.readerId.masked()}")
             }
         })
@@ -126,9 +126,24 @@ internal class AutoSignInExecutor(
         return "$prefix：$message"
     }
 
-    private fun toast(context: Context, message: String) {
+    private fun toast(activity: Activity, fallbackContext: Context, message: String) {
         mainHandler.post {
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            val liveActivity = activity.takeUnless { it.isFinishing || it.isDestroyed }
+            val context = liveActivity ?: fallbackContext
+            val showToast = Runnable {
+                runCatching {
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }.onSuccess {
+                    ModuleFileLogger.i(TAG, "Toast requested: activity=${activity.javaClass.name}")
+                }.onFailure { throwable ->
+                    ModuleFileLogger.w(TAG, "Toast request failed: activity=${activity.javaClass.name}", throwable)
+                }
+            }
+            if (liveActivity == null) {
+                showToast.run()
+            } else {
+                liveActivity.window.decorView.post(showToast)
+            }
         }
     }
 
