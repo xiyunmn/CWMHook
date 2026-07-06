@@ -4,19 +4,23 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
+import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
+import kotlin.math.min
 
 internal class ChapterBackupHookInstaller(
     private val logTag: String,
@@ -24,6 +28,7 @@ internal class ChapterBackupHookInstaller(
     private var catalogHookInstalled = false
     private var activityResultHookInstalled = false
     private var skinHookInstalled = false
+    private var activityLifecycleHookInstalled = false
     private var exporter: ChapterBackupExporter? = null
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
@@ -32,11 +37,12 @@ internal class ChapterBackupHookInstaller(
         }
         hookCatalogFragment(module, classLoader)
         hookActivityResult(module)
+        hookActivityLifecycle(module)
         hookSkinChange(module, classLoader)
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
-        if (!catalogHookInstalled || !activityResultHookInstalled || !skinHookInstalled) {
+        if (!catalogHookInstalled || !activityResultHookInstalled || !activityLifecycleHookInstalled || !skinHookInstalled) {
             ModuleFileLogger.i(logTag, "Retry chapter backup hooks: $reason")
         }
         install(module, classLoader)
@@ -119,7 +125,13 @@ internal class ChapterBackupHookInstaller(
         }
         ModuleFileLogger.i(logTag, "Catalog export entry injected: ${activity.javaClass.name}")
         exporter?.let { currentExporter ->
-            ChapterExportSelectionWindow.restoreIfNeeded(activity, currentExporter, restoredBookInfo, restoredDownloadType)
+            ChapterExportSelectionWindow.restoreIfNeeded(
+                activity,
+                currentExporter,
+                restoredBookInfo,
+                restoredDownloadType,
+                "FragmentCatalog3.onCreateView",
+            )
         }
     }
 
@@ -141,14 +153,8 @@ internal class ChapterBackupHookInstaller(
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     addView(
-                        ImageView(activity).apply {
-                            val icon = ChapterBackupSkinBridge.drawableId(activity, "contents_download")
-                            if (icon != 0) {
-                                setImageResource(icon)
-                                ChapterBackupSkinBridge.applyAttr(this, "src", icon)
-                            }
-                        },
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                        CatalogExportIconView(activity, color),
+                        LinearLayout.LayoutParams(dp(activity, 24), dp(activity, 24)),
                     )
                     addView(
                         TextView(activity).apply {
@@ -231,6 +237,86 @@ internal class ChapterBackupHookInstaller(
         }
     }
 
+    private fun hookActivityLifecycle(module: XposedModule) {
+        if (activityLifecycleHookInstalled) {
+            return
+        }
+        val createHooked = XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onCreate", android.os.Bundle::class.java),
+            "$logTag.Activity.onCreate",
+        ) { chain ->
+            (chain.thisObject as? Activity)?.schedulePendingRestore("Activity.onCreate", 0L)
+        }
+        val postResumeHooked = XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onPostResume"),
+            "$logTag.Activity.onPostResume",
+        ) { chain ->
+            (chain.thisObject as? Activity)?.schedulePendingRestore("Activity.onPostResume", 80L)
+        }
+        val focusHooked = XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onWindowFocusChanged", Boolean::class.javaPrimitiveType),
+            "$logTag.Activity.onWindowFocusChanged",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            val hasFocus = chain.getArg(0) as? Boolean ?: return@hookAfter
+            if (hasFocus) {
+                activity.schedulePendingRestore("Activity.onWindowFocusChanged", 40L)
+            }
+        }
+        val saveStateHooked = XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onSaveInstanceState", android.os.Bundle::class.java),
+            "$logTag.Activity.onSaveInstanceState",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (activity.isChapterBackupHostActivity()) {
+                ChapterExportSelectionWindow.captureActiveForHostChange("Activity.onSaveInstanceState")
+            }
+        }
+        val destroyHooked = XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onDestroy"),
+            "$logTag.Activity.onDestroy",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (activity.isChapterBackupHostActivity()) {
+                ChapterExportSelectionWindow.handleHostActivityDestroy(activity, "Activity.onDestroy")
+            }
+        }
+        if (createHooked && postResumeHooked && focusHooked && saveStateHooked && destroyHooked) {
+            activityLifecycleHookInstalled = true
+            ModuleFileLogger.i(logTag, "Chapter backup Activity lifecycle hooks installed")
+        }
+    }
+
+    private fun Activity.schedulePendingRestore(reason: String, delayMs: Long) {
+        if (!isChapterBackupHostActivity()) {
+            return
+        }
+        if (!ChapterBackupConfigStore.readLocal(this).enabled) {
+            return
+        }
+        val currentExporter = exporter ?: return
+        window.decorView.postDelayed(
+            {
+                if (!isFinishing && !isDestroyedCompat()) {
+                    val bookInfo = catalogActivityBookInfo() ?: return@postDelayed
+                    ChapterExportSelectionWindow.restoreIfNeeded(
+                        this,
+                        currentExporter,
+                        bookInfo,
+                        catalogActivityDownloadType(),
+                        reason,
+                    )
+                }
+            },
+            delayMs,
+        )
+    }
+
     private fun hookSkinChange(module: XposedModule, classLoader: ClassLoader) {
         if (skinHookInstalled) {
             return
@@ -238,7 +324,6 @@ internal class ChapterBackupHookInstaller(
         val helperClass = XposedCompat.findClassOrNull(CiweiMaoClasses.SKIN_CHANGE_HELPER, classLoader) ?: return
         val listenerClass = XposedCompat.findClassOrNull(CiweiMaoClasses.SKIN_CHANGE_LISTENER, classLoader) ?: return
         var installed = false
-        installed = hookSkinMethod(module, helperClass, "switchSkinMode", String::class.java, listenerClass) || installed
         installed = hookSkinMethod(module, helperClass, "refreshSkin", listenerClass) || installed
         if (installed) {
             skinHookInstalled = true
@@ -255,8 +340,70 @@ internal class ChapterBackupHookInstaller(
         val method = runCatching {
             helperClass.getDeclaredMethod(methodName, *parameterTypes).also { it.isAccessible = true }
         }.getOrNull() ?: return false
-        return XposedCompat.hookAfter(module, method, "$logTag.SkinChangeHelper.$methodName") {
+        return XposedCompat.interceptProtective(module, method, "$logTag.SkinChangeHelper.$methodName") { chain ->
+            ChapterExportSelectionWindow.captureActiveForHostChange("SkinChangeHelper.$methodName:before")
+            val result = chain.proceed()
             ChapterExportSelectionWindow.scheduleHostSkinRefresh("SkinChangeHelper.$methodName")
+            result
+        }
+    }
+
+    private fun Activity.isChapterBackupHostActivity(): Boolean {
+        return when (javaClass.name) {
+            CiweiMaoClasses.CATALOG_ACTIVITY,
+            CiweiMaoClasses.CATALOG_ACTIVITY_LANDSCAPE,
+            CiweiMaoClasses.READER_ACTIVITY -> true
+            else -> false
+        }
+    }
+
+    private fun Activity.catalogActivityBookInfo(): Any? {
+        declaredField("bookInfo")?.let { return it }
+        return declaredField("catalogData")?.callNoArgMethod("getBookInfo")
+    }
+
+    private fun Activity.catalogActivityDownloadType(): String? {
+        val type = declaredField("type") as? String
+        if (type == "comic") {
+            return "comic"
+        }
+        val catalogData = declaredField("catalogData")
+        if (catalogData?.booleanMethod("isIs_comic") == true) {
+            return "comic"
+        }
+        return if (catalogActivityBookInfo()?.stringMethod("getBook_type") == "2") {
+            "comic"
+        } else {
+            null
+        }
+    }
+
+    private fun Activity.isDestroyedCompat(): Boolean {
+        return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed
+    }
+
+    private class CatalogExportIconView(
+        context: Context,
+        private val fallbackColor: Int,
+    ) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            paint.color = ChapterBackupSkinBridge.color(context, "text_333333", fallbackColor)
+            paint.strokeWidth = (2f * resources.displayMetrics.density).coerceAtLeast(1f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.style = Paint.Style.STROKE
+            CommonIconPainter.drawChapterExport(
+                canvas = canvas,
+                paint = paint,
+                rect = rect,
+                cx = width / 2f,
+                cy = height / 2f,
+                size = min(width, height) * 0.72f,
+            )
         }
     }
 

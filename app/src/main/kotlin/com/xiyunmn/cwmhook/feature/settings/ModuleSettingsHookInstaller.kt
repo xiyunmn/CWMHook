@@ -1,4 +1,4 @@
-package com.xiyunmn.cwmhook.feature.panel
+package com.xiyunmn.cwmhook.feature.settings
 
 import android.app.Activity
 import android.os.Bundle
@@ -12,62 +12,36 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Executable
 
-internal class FloatingPanelHookInstaller(
+internal class ModuleSettingsHookInstaller(
     private val logTag: String,
-    private val onFragmentEntryReady: (Any) -> Unit,
     private val onBookShelfEntryReady: (Any) -> Unit,
     private val onMainFrameActivityReady: (Activity, String) -> Unit,
+    private val onReaderActivityReady: (Activity, String) -> Unit,
+    private val onMainFrameActivitySaveState: (Activity, String) -> Unit,
+    private val onMainFrameActivityDestroy: (Activity, String) -> Unit,
+    private val onHostThemeChangeStarted: (String) -> Unit,
+    private val onHostThemeChanged: (String) -> Unit,
     private val isBackKey: (KeyEvent?) -> Boolean,
     private val hasPanel: (Activity) -> Boolean,
     private val closePanel: (Activity, String) -> Boolean,
 ) {
-    private var recommendHookInstalled = false
     private var bookShelfHookInstalled = false
     private var activityHookInstalled = false
+    private var skinHookInstalled = false
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
         hookMainActivityLifecycle(module)
-        hookRecommendEntry(module, classLoader)
+        hookSkinChange(module, classLoader)
         hookBookShelfEntry(module, classLoader)
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
         hookMainActivityLifecycle(module)
-        if (!recommendHookInstalled) {
-            ModuleFileLogger.i(logTag, "Retry floating panel hook: $reason")
-            hookRecommendEntry(module, classLoader)
-        }
+        hookSkinChange(module, classLoader)
         if (!bookShelfHookInstalled) {
-            ModuleFileLogger.i(logTag, "Retry bookshelf floating panel hook: $reason")
+            ModuleFileLogger.i(logTag, "Retry bookshelf module settings entry hook: $reason")
             hookBookShelfEntry(module, classLoader)
         }
-    }
-
-    private fun hookRecommendEntry(module: XposedModule, classLoader: ClassLoader) {
-        if (recommendHookInstalled) {
-            return
-        }
-        val fragmentClass = try {
-            Class.forName(CiweiMaoClasses.RECOMMEND_FRAGMENT, false, classLoader)
-        } catch (_: Throwable) {
-            ModuleFileLogger.i(logTag, "FragRecommendNew not visible yet, floating panel hook deferred")
-            return
-        }
-        val method = runCatching {
-            fragmentClass.getDeclaredMethod("initView").also { it.isAccessible = true }
-        }.getOrElse { throwable ->
-            ModuleFileLogger.e(logTag, "FragRecommendNew.initView not found", throwable)
-            return
-        }
-
-        val hooked = hookAfter(module, method) { chain ->
-            onFragmentEntryReady(chain.thisObject)
-        }
-        if (!hooked) {
-            return
-        }
-        recommendHookInstalled = true
-        ModuleFileLogger.i(logTag, "Floating panel entry hook installed")
     }
 
     private fun hookBookShelfEntry(module: XposedModule, classLoader: ClassLoader) {
@@ -77,7 +51,7 @@ internal class FloatingPanelHookInstaller(
         val fragmentClass = try {
             Class.forName(CiweiMaoClasses.BOOK_SHELF_FRAGMENT, false, classLoader)
         } catch (_: Throwable) {
-            ModuleFileLogger.i(logTag, "BookShelfFrgment1 not visible yet, floating panel hook deferred")
+            ModuleFileLogger.i(logTag, "BookShelfFrgment1 not visible yet, module settings entry hook deferred")
             return
         }
         val method = runCatching {
@@ -99,7 +73,7 @@ internal class FloatingPanelHookInstaller(
             return
         }
         bookShelfHookInstalled = true
-        ModuleFileLogger.i(logTag, "Bookshelf floating panel entry hook installed")
+        ModuleFileLogger.i(logTag, "Bookshelf module settings entry hook installed")
     }
 
     private fun hookMainActivityLifecycle(module: XposedModule) {
@@ -108,27 +82,81 @@ internal class FloatingPanelHookInstaller(
         }
         val resumeHooked = hookAfter(module, Activity::class.java.getDeclaredMethod("onPostResume")) { chain ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
-            if (activity.javaClass.name == CiweiMaoClasses.MAIN_FRAME_ACTIVITY) {
-                activity.window.decorView.post {
-                    onMainFrameActivityReady(activity, "activity:onPostResume")
-                }
+            activity.window.decorView.post {
+                dispatchActivityReady(activity, "activity:onPostResume")
             }
         }
         val focusHooked = hookAfter(module, Activity::class.java.getDeclaredMethod("onWindowFocusChanged", Boolean::class.javaPrimitiveType)) { chain ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
             val hasFocus = chain.args.firstOrNull() as? Boolean ?: return@hookAfter
-            if (hasFocus && activity.javaClass.name == CiweiMaoClasses.MAIN_FRAME_ACTIVITY) {
+            if (hasFocus) {
                 activity.window.decorView.post {
-                    onMainFrameActivityReady(activity, "activity:onWindowFocus")
+                    dispatchActivityReady(activity, "activity:onWindowFocus")
                 }
             }
         }
+        val saveStateHooked = hookAfter(module, Activity::class.java.getDeclaredMethod("onSaveInstanceState", Bundle::class.java)) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (activity.isModuleSettingsHostActivity()) {
+                onMainFrameActivitySaveState(activity, "activity:onSaveInstanceState")
+            }
+        }
+        val destroyHooked = hookAfter(module, Activity::class.java.getDeclaredMethod("onDestroy")) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (activity.isModuleSettingsHostActivity()) {
+                onMainFrameActivityDestroy(activity, "activity:onDestroy")
+            }
+        }
         val backHooked = hookBackClose(module)
-        if (!resumeHooked || !focusHooked || !backHooked) {
+        if (!resumeHooked || !focusHooked || !saveStateHooked || !destroyHooked || !backHooked) {
             return
         }
         activityHookInstalled = true
-        ModuleFileLogger.i(logTag, "Floating panel Activity lifecycle hooks installed")
+        ModuleFileLogger.i(logTag, "Module settings Activity lifecycle hooks installed")
+    }
+
+    private fun dispatchActivityReady(activity: Activity, reason: String) {
+        when (activity.javaClass.name) {
+            CiweiMaoClasses.MAIN_FRAME_ACTIVITY -> onMainFrameActivityReady(activity, reason)
+            CiweiMaoClasses.READER_ACTIVITY -> onReaderActivityReady(activity, reason)
+        }
+    }
+
+    private fun Activity.isModuleSettingsHostActivity(): Boolean {
+        return javaClass.name == CiweiMaoClasses.MAIN_FRAME_ACTIVITY ||
+            javaClass.name == CiweiMaoClasses.READER_ACTIVITY
+    }
+
+    private fun hookSkinChange(module: XposedModule, classLoader: ClassLoader) {
+        if (skinHookInstalled) {
+            return
+        }
+        val helperClass = XposedCompat.findClassOrNull(CiweiMaoClasses.SKIN_CHANGE_HELPER, classLoader) ?: return
+        val listenerClass = XposedCompat.findClassOrNull(CiweiMaoClasses.SKIN_CHANGE_LISTENER, classLoader) ?: return
+        var installed = false
+        installed = hookSkinMethod(module, helperClass, "switchSkinMode", String::class.java, listenerClass) || installed
+        installed = hookSkinMethod(module, helperClass, "refreshSkin", listenerClass) || installed
+        if (installed) {
+            skinHookInstalled = true
+            ModuleFileLogger.i(logTag, "Module settings skin hooks installed")
+        }
+    }
+
+    private fun hookSkinMethod(
+        module: XposedModule,
+        helperClass: Class<*>,
+        methodName: String,
+        vararg parameterTypes: Class<*>,
+    ): Boolean {
+        val method = runCatching {
+            helperClass.getDeclaredMethod(methodName, *parameterTypes).also { it.isAccessible = true }
+        }.getOrNull() ?: return false
+        return XposedCompat.interceptProtective(module, method, "$logTag.SkinChangeHelper.$methodName") { chain ->
+            onHostThemeChangeStarted("SkinChangeHelper.$methodName:before")
+            val result = chain.proceed()
+            onHostThemeChanged("SkinChangeHelper.$methodName")
+            result
+        }
     }
 
     private fun hookBackClose(module: XposedModule): Boolean {

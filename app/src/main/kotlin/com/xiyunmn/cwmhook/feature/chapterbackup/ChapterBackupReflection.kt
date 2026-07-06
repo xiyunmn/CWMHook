@@ -39,6 +39,9 @@ internal fun Any.toChapterBackupBook(): ChapterBackupBook? {
         bookId = bookId,
         title = stringMethod("getBook_name") ?: bookId,
         author = stringMethod("getAuthor_name"),
+        description = stringMethod("getDescription"),
+        introduce = stringMethod("getIntroduce"),
+        coverUrl = stringMethod("getCover"),
     )
 }
 

@@ -6,7 +6,10 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -19,7 +22,6 @@ import android.view.DragEvent
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.RelativeLayout
@@ -27,10 +29,12 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import java.io.File
 import java.util.Locale
+import kotlin.math.min
 
 internal class ReaderFontSettingsInjector(
     private val typefaceProvider: ReaderFontTypefaceProvider,
@@ -62,6 +66,7 @@ internal class ReaderFontSettingsInjector(
                 return@runCatching
             }
             val contentRoot = ensureSettingsScrollable(activity) ?: contentLinearRoot(activity) ?: return@runCatching
+            extendFontSettingsScrollRange(activity, contentRoot)
             insertImportPanel(activity, activityClass, contentRoot)
             rebuildCustomRows(activity, activityClass)
             updateCustomChecks(activity)
@@ -77,6 +82,20 @@ internal class ReaderFontSettingsInjector(
         resultCode: Int,
         data: Intent?,
     ): Boolean {
+        return handleImportResult(activity, requestCode, resultCode, data) { imported ->
+            applyCustomFontSelection(activity, activityClass, imported.first())
+            rebuildCustomRows(activity, activityClass)
+            updateCustomChecks(activity)
+        }
+    }
+
+    fun handleImportResult(
+        activity: Activity,
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+        onImported: (List<String>) -> Unit = {},
+    ): Boolean {
         if (requestCode != REQUEST_IMPORT_FONT) {
             return false
         }
@@ -87,47 +106,9 @@ internal class ReaderFontSettingsInjector(
         if (resultCode != Activity.RESULT_OK) {
             return true
         }
-        val uris = selectedFontUris(data)
-        if (uris.isEmpty()) {
-            Toast.makeText(activity, "未读取到字体文件", Toast.LENGTH_SHORT).show()
-            return true
-        }
-
-        runCatching {
-            val imported = mutableListOf<String>()
-            var failedCount = 0
-            uris.forEach { uri ->
-                runCatching {
-                    val font = copyFontToPrivateDir(activity, uri)
-                    if (typefaceProvider.validate(font.absolutePath)) {
-                        imported += font.absolutePath
-                        ModuleFileLogger.i(logTag, "Imported reader font: ${font.absolutePath}")
-                    } else {
-                        font.delete()
-                        failedCount++
-                    }
-                }.onFailure { throwable ->
-                    failedCount++
-                    ModuleFileLogger.e(logTag, "Failed to import one reader font", throwable)
-                }
-            }
-            if (imported.isEmpty()) {
-                Toast.makeText(activity, "字体文件无法加载", Toast.LENGTH_SHORT).show()
-                return true
-            }
-            ReaderFontConfigStore.rememberFonts(activity, imported)
-            applyCustomFontSelection(activity, activityClass, imported.first())
-            rebuildCustomRows(activity, activityClass)
-            updateCustomChecks(activity)
-            val message = if (failedCount == 0) {
-                "已导入 ${imported.size} 个字体"
-            } else {
-                "已导入 ${imported.size} 个字体，${failedCount} 个失败"
-            }
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
-        }.onFailure { throwable ->
-            ModuleFileLogger.e(logTag, "Failed to import reader font", throwable)
-            Toast.makeText(activity, "导入字体失败", Toast.LENGTH_SHORT).show()
+        val result = importSelectedFonts(activity, data)
+        if (result.imported.isNotEmpty()) {
+            onImported(result.imported)
         }
         return true
     }
@@ -207,7 +188,7 @@ internal class ReaderFontSettingsInjector(
                     LinearLayout.LayoutParams(0, dp(activity, 42), 1f),
                 )
                 addView(
-                    createPanelButton(activity, "编辑字体", palette, buttonBackground) {
+                    createPanelButton(activity, "管理本地字体", palette, buttonBackground) {
                         showFontManager(activity, activityClass)
                     },
                     LinearLayout.LayoutParams(0, dp(activity, 42), 1f).apply {
@@ -248,7 +229,7 @@ internal class ReaderFontSettingsInjector(
         }
     }
 
-    private fun startFontPicker(activity: Activity) {
+    fun startFontPicker(activity: Activity) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -271,6 +252,56 @@ internal class ReaderFontSettingsInjector(
             activity.startActivityForResult(intent, REQUEST_IMPORT_FONT)
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(activity, "无法打开系统文件选择器", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private data class FontImportResult(
+        val imported: List<String>,
+        val failedCount: Int,
+    )
+
+    private fun importSelectedFonts(activity: Activity, data: Intent?): FontImportResult {
+        val uris = selectedFontUris(data)
+        if (uris.isEmpty()) {
+            Toast.makeText(activity, "未读取到字体文件", Toast.LENGTH_SHORT).show()
+            return FontImportResult(emptyList(), 0)
+        }
+
+        return runCatching {
+            val imported = mutableListOf<String>()
+            var failedCount = 0
+            uris.forEach { uri ->
+                runCatching {
+                    val font = copyFontToPrivateDir(activity, uri)
+                    if (typefaceProvider.validate(font.absolutePath)) {
+                        imported += font.absolutePath
+                        ModuleFileLogger.i(logTag, "Imported reader font: ${font.absolutePath}")
+                    } else {
+                        font.delete()
+                        failedCount++
+                    }
+                }.onFailure { throwable ->
+                    failedCount++
+                    ModuleFileLogger.e(logTag, "Failed to import one reader font", throwable)
+                }
+            }
+            if (imported.isEmpty()) {
+                Toast.makeText(activity, "字体文件无法加载", Toast.LENGTH_SHORT).show()
+                FontImportResult(emptyList(), failedCount)
+            } else {
+                ReaderFontConfigStore.rememberFonts(activity, imported)
+                val message = if (failedCount == 0) {
+                    "已导入 ${imported.size} 个字体"
+                } else {
+                    "已导入 ${imported.size} 个字体，${failedCount} 个失败"
+                }
+                Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+                FontImportResult(imported, failedCount)
+            }
+        }.getOrElse { throwable ->
+            ModuleFileLogger.e(logTag, "Failed to import reader font", throwable)
+            Toast.makeText(activity, "导入字体失败", Toast.LENGTH_SHORT).show()
+            FontImportResult(emptyList(), 0)
         }
     }
 
@@ -398,16 +429,12 @@ internal class ReaderFontSettingsInjector(
                 addRule(RelativeLayout.CENTER_VERTICAL)
             },
         )
-        val selectedDrawable = skinnedDrawableId(activity, "selected", palette.skinKey)
         row.addView(
-            ImageView(activity).apply {
+            ReaderFontIconView(activity, ReaderFontIconKind.RADIO_SELECTED, palette.accent).apply {
                 tag = customCheckTagPrefix + path
                 visibility = View.GONE
-                if (selectedDrawable != 0) {
-                    setImageResource(selectedDrawable)
-                }
             },
-            RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            RelativeLayout.LayoutParams(dp(activity, 36), dp(activity, 36)).apply {
                 addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
                 addRule(RelativeLayout.CENTER_VERTICAL)
                 rightMargin = dp(activity, 16)
@@ -513,6 +540,7 @@ internal class ReaderFontSettingsInjector(
         onDelete: () -> Unit,
     ): View {
         val file = File(path)
+        val selected = File(typefaceProvider.currentTextTypePath(activity)).absolutePath == file.absolutePath
         val row = LinearLayout(activity).apply {
             tag = manageRowTagPrefix + path
             orientation = LinearLayout.HORIZONTAL
@@ -530,13 +558,16 @@ internal class ReaderFontSettingsInjector(
                 }
             }
         }
-        row.addView(TextView(activity).apply {
-            text = "≡"
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setTextColor(palette.subText)
-            typeface = Typeface.DEFAULT_BOLD
-        }, LinearLayout.LayoutParams(dp(activity, 34), ViewGroup.LayoutParams.MATCH_PARENT))
+        row.addView(
+            ReaderFontIconView(
+                activity,
+                ReaderFontIconKind.DRAG,
+                if (selected) palette.accent else palette.subText,
+            ),
+            LinearLayout.LayoutParams(dp(activity, 38), dp(activity, 38)).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            },
+        )
 
         val texts = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -561,18 +592,35 @@ internal class ReaderFontSettingsInjector(
             setPadding(0, dp(activity, 4), 0, 0)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(TextView(activity).apply {
-            text = "删除"
-            textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(palette.accent)
-            isClickable = true
-            setOnClickListener {
-                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                onDelete()
-            }
-        }, LinearLayout.LayoutParams(dp(activity, 56), ViewGroup.LayoutParams.MATCH_PARENT))
+        row.addView(
+            RelativeLayout(activity).apply {
+                if (selected) {
+                    addView(
+                        ReaderFontIconView(activity, ReaderFontIconKind.RADIO_SELECTED, palette.accent),
+                        RelativeLayout.LayoutParams(dp(activity, 34), dp(activity, 34)).apply {
+                            addRule(RelativeLayout.CENTER_IN_PARENT)
+                        },
+                    )
+                }
+            },
+            LinearLayout.LayoutParams(dp(activity, 42), ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+        row.addView(
+            RelativeLayout(activity).apply {
+                isClickable = true
+                addView(
+                    ReaderFontIconView(activity, ReaderFontIconKind.DELETE, palette.accent),
+                    RelativeLayout.LayoutParams(dp(activity, 36), dp(activity, 36)).apply {
+                        addRule(RelativeLayout.CENTER_IN_PARENT)
+                    },
+                )
+                setOnClickListener {
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    onDelete()
+                }
+            },
+            LinearLayout.LayoutParams(dp(activity, 50), ViewGroup.LayoutParams.MATCH_PARENT),
+        )
         return row
     }
 
@@ -799,6 +847,16 @@ internal class ReaderFontSettingsInjector(
         return content
     }
 
+    private fun extendFontSettingsScrollRange(activity: Activity, content: LinearLayout) {
+        if (content.tag != scrollContentTag) {
+            return
+        }
+        val bottomPadding = dp(activity, 48)
+        if (content.paddingBottom < bottomPadding) {
+            content.setPadding(content.paddingLeft, content.paddingTop, content.paddingRight, bottomPadding)
+        }
+    }
+
     private fun firstFontContentIndex(activity: Activity, root: LinearLayout): Int {
         val indices = listOf("lay_jian", "lay_fan").mapNotNull { name ->
             val id = activity.resources.getIdentifier(name, "id", activity.packageName)
@@ -909,10 +967,6 @@ internal class ReaderFontSettingsInjector(
             "green", "pink" -> listOf("${name}_$skinKey", name)
             else -> listOf(name)
         }
-    }
-
-    private fun skinnedDrawableId(context: Context, name: String, skinKey: String): Int {
-        return hostDrawableId(context, skinnedNames(name, skinKey))
     }
 
     private fun skinnedButtonDrawableId(context: Context, skinKey: String): Int {
@@ -1045,5 +1099,35 @@ internal class ReaderFontSettingsInjector(
 
     private fun dp(context: Context, value: Int): Int {
         return (value * context.resources.displayMetrics.density + 0.5f).toInt()
+    }
+
+    private enum class ReaderFontIconKind {
+        DRAG,
+        DELETE,
+        RADIO_SELECTED,
+    }
+
+    private class ReaderFontIconView(
+        context: Context,
+        private val kind: ReaderFontIconKind,
+        private val iconColor: Int,
+    ) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            paint.color = iconColor
+            paint.strokeWidth = (2f * resources.displayMetrics.density).coerceAtLeast(1f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.style = Paint.Style.STROKE
+            val size = min(width, height) * 0.48f
+            when (kind) {
+                ReaderFontIconKind.DRAG -> CommonIconPainter.drawDrag(canvas, paint, width / 2f, height / 2f, size)
+                ReaderFontIconKind.DELETE -> CommonIconPainter.drawDelete(canvas, paint, rect, width / 2f, height / 2f, size)
+                ReaderFontIconKind.RADIO_SELECTED -> CommonIconPainter.drawRadioSelected(canvas, paint, width / 2f, height / 2f, size)
+            }
+        }
     }
 }

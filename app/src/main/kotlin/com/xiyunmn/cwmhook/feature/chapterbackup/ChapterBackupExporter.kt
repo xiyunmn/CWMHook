@@ -94,6 +94,7 @@ internal class ChapterBackupExporter(
         book: ChapterBackupBook,
         selected: List<ChapterBackupCandidate>,
         naming: ChapterBackupNaming? = null,
+        format: ChapterBackupFormat = ChapterBackupFormat.TXT,
         callback: Callback,
     ) {
         val appContext = context.applicationContext ?: context
@@ -103,7 +104,7 @@ internal class ChapterBackupExporter(
         }
         callback.onStarted()
         executor.execute {
-            val result = runCatching { exportSelectedChaptersOnWorker(appContext, book, selected, naming) }
+            val result = runCatching { exportSelectedChaptersOnWorker(appContext, book, selected, naming, format) }
             mainHandler.post {
                 result
                     .onSuccess(callback::onSuccess)
@@ -121,6 +122,7 @@ internal class ChapterBackupExporter(
         selected: List<ChapterBackupCandidate>,
         downloadType: String?,
         naming: ChapterBackupNaming? = null,
+        format: ChapterBackupFormat = ChapterBackupFormat.TXT,
         callback: Callback,
     ) {
         val appContext = context.applicationContext ?: context
@@ -129,17 +131,15 @@ internal class ChapterBackupExporter(
             callback.onFailure("请先选择章节")
             return
         }
-        val blocked = distinct.count { !it.cached && !it.authorized }
+        val blocked = currentBlockedCount(appContext, book, distinct)
         if (blocked > 0) {
             callback.onFailure("包含 $blocked 章不可导出的章节，请重新选择")
             return
         }
         callback.onStarted()
-        val pendingDownloadIds = distinct
-            .filter { !it.cached && it.authorized }
-            .map { it.chapterId }
+        val pendingDownloadIds = currentPendingDownloadIds(appContext, book, distinct)
         if (pendingDownloadIds.isEmpty()) {
-            exportSelectedChaptersAfterDownload(appContext, book, distinct, naming, callback)
+            exportSelectedChaptersAfterDownload(appContext, book, distinct, naming, format, callback)
             return
         }
         runHostDownloadPreflight(
@@ -152,6 +152,7 @@ internal class ChapterBackupExporter(
                     pendingDownloadIds = pendingDownloadIds,
                     downloadType = downloadType,
                     naming = naming,
+                    format = format,
                     callback = callback,
                 )
             },
@@ -159,15 +160,52 @@ internal class ChapterBackupExporter(
         )
     }
 
+    private fun currentBlockedCount(
+        context: Context,
+        book: ChapterBackupBook,
+        selected: List<ChapterBackupCandidate>,
+    ): Int {
+        return runCatching {
+            val readerId = currentReaderId()
+            selected.count { candidate ->
+                !cacheState(context, book.bookId, candidate.chapterId, readerId).cached && !candidate.authorized
+            }
+        }.getOrElse { throwable ->
+            ModuleFileLogger.w(logTag, "Failed to recheck blocked chapters before export: book=${book.bookId}", throwable)
+            selected.count { !it.cached && !it.authorized }
+        }
+    }
+
+    private fun currentPendingDownloadIds(
+        context: Context,
+        book: ChapterBackupBook,
+        selected: List<ChapterBackupCandidate>,
+    ): List<String> {
+        return runCatching {
+            val readerId = currentReaderId()
+            selected
+                .filter { candidate ->
+                    !cacheState(context, book.bookId, candidate.chapterId, readerId).cached && candidate.authorized
+                }
+                .map { it.chapterId }
+        }.getOrElse { throwable ->
+            ModuleFileLogger.w(logTag, "Failed to recheck chapter cache before export: book=${book.bookId}", throwable)
+            selected
+                .filter { !it.cached && it.authorized }
+                .map { it.chapterId }
+        }
+    }
+
     private fun exportSelectedChaptersAfterDownload(
         context: Context,
         book: ChapterBackupBook,
         selected: List<ChapterBackupCandidate>,
         naming: ChapterBackupNaming?,
+        format: ChapterBackupFormat,
         callback: Callback,
     ) {
         executor.execute {
-            val result = runCatching { exportSelectedChaptersOnWorker(context, book, selected, naming) }
+            val result = runCatching { exportSelectedChaptersOnWorker(context, book, selected, naming, format) }
             mainHandler.post {
                 result
                     .onSuccess(callback::onSuccess)
@@ -229,6 +267,7 @@ internal class ChapterBackupExporter(
         pendingDownloadIds: List<String>,
         downloadType: String?,
         naming: ChapterBackupNaming?,
+        format: ChapterBackupFormat,
         callback: Callback,
     ) {
         mainHandler.post {
@@ -252,7 +291,7 @@ internal class ChapterBackupExporter(
                     restoreListener()
                     ModuleFileLogger.i(logTag, "Host chapter download complete: book=${book.bookId}, reason=$reason")
                     mainHandler.postDelayed(
-                        { exportSelectedChaptersAfterDownload(context, book, selected, naming, callback) },
+                        { exportSelectedChaptersAfterDownload(context, book, selected, naming, format, callback) },
                         EXPORT_AFTER_DOWNLOAD_DELAY_MS,
                     )
                 }
@@ -285,7 +324,7 @@ internal class ChapterBackupExporter(
                         if (completed.compareAndSet(false, true)) {
                             restoreListener()
                             ModuleFileLogger.w(logTag, "Host chapter download timeout: book=${book.bookId}")
-                            exportSelectedChaptersAfterDownload(context, book, selected, naming, callback)
+                            exportSelectedChaptersAfterDownload(context, book, selected, naming, format, callback)
                         }
                     },
                     DOWNLOAD_TIMEOUT_MS,
@@ -375,6 +414,7 @@ internal class ChapterBackupExporter(
         book: ChapterBackupBook,
         selected: List<ChapterBackupCandidate>,
         naming: ChapterBackupNaming?,
+        format: ChapterBackupFormat,
     ): ChapterBackupResult {
         val config = ChapterBackupConfigStore.readLocal(context)
         requireEnabled(config)
@@ -395,13 +435,14 @@ internal class ChapterBackupExporter(
                 chapterId = candidate.chapterId,
                 title = candidate.title,
                 index = candidate.index,
+                divisionTitle = candidate.divisionTitle,
                 content = content,
             )
         }.sortedBy { it.index }
         if (chapters.isEmpty()) {
             error("没有可导出的已缓存章节")
         }
-        destination.writeBookBackup(null, book, chapters, effectiveNaming)
+        destination.writeBookBackup(null, book, chapters, effectiveNaming, format)
         val result = ChapterBackupResult(
             bookCount = 1,
             chapterCount = chapters.size,
@@ -410,22 +451,25 @@ internal class ChapterBackupExporter(
         )
         ModuleFileLogger.i(
             logTag,
-            "Selected chapter export finished: book=${book.bookId}, chapters=${result.chapterCount}, skipped=${result.skippedCount}, output=${result.outputLabel}",
+            "Selected chapter export finished: book=${book.bookId}, format=${format.displayName}, chapters=${result.chapterCount}, skipped=${result.skippedCount}, output=${result.outputLabel}",
         )
         return result
     }
 
     private fun cachedReadableChapters(context: Context, book: ChapterBackupBook): List<ChapterBackupChapter> {
         val readerId = currentReaderId()
+        val divisions = divisionNames(book.bookId)
         val chapters = catalogChapters(book.bookId)
         return chapters.mapNotNull { chapterInfo ->
             val chapterId = chapterInfo.stringMethod("getChapter_id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val divisionId = chapterInfo.stringMethod("getDivision_id")
             val content = readCachedContent(context, book.bookId, chapterId, readerId)
                 ?: return@mapNotNull null
             ChapterBackupChapter(
                 chapterId = chapterId,
                 title = chapterInfo.stringMethod("getChapter_title") ?: chapterId,
                 index = chapterInfo.intMethod("getChapter_index"),
+                divisionTitle = divisionId?.let { divisions[it] } ?: "作品相关",
                 content = content,
             )
         }.sortedBy { it.index }
@@ -477,12 +521,7 @@ internal class ChapterBackupExporter(
         val list = shelfDao.javaClass.getMethod("queryAll").invoke(shelfDao) as? List<*> ?: return emptyList()
         return list.mapNotNull { shelf ->
             val bookInfo = shelf?.javaClass?.getMethod("getBook_info")?.invoke(shelf) ?: return@mapNotNull null
-            val bookId = bookInfo.stringMethod("getBook_id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            ChapterBackupBook(
-                bookId = bookId,
-                title = bookInfo.stringMethod("getBook_name") ?: bookId,
-                author = bookInfo.stringMethod("getAuthor_name"),
-            )
+            bookInfo.toChapterBackupBook()
         }.distinctBy { it.bookId }
     }
 

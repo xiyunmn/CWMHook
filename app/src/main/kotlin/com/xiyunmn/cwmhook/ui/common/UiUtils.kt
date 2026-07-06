@@ -2,7 +2,9 @@ package com.xiyunmn.cwmhook.ui.common
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.view.View
 
 fun dp(context: Context, value: Int): Int {
@@ -26,6 +28,25 @@ fun blendColor(foreground: Int, background: Int, amount: Float): Int {
         (Color.green(foreground) * alpha + Color.green(background) * (1f - alpha)).toInt(),
         (Color.blue(foreground) * alpha + Color.blue(background) * (1f - alpha)).toInt(),
     )
+}
+
+fun edgeGlowBackground(context: Context, normalColor: Int, accentColor: Int): Drawable {
+    val normal = GradientDrawable().apply {
+        setColor(normalColor)
+    }
+    val active = GradientDrawable().apply {
+        setColor(normalColor)
+        setStroke(
+            dp(context, 1).coerceAtLeast(1),
+            blendColor(accentColor, normalColor, 0.32f),
+        )
+    }
+    return StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_pressed), active)
+        addState(intArrayOf(android.R.attr.state_focused), active)
+        addState(intArrayOf(android.R.attr.state_selected), active)
+        addState(intArrayOf(), normal)
+    }
 }
 
 fun animatePress(view: View, action: () -> Unit) {

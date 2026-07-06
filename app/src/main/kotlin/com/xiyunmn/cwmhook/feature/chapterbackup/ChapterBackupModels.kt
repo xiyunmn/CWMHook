@@ -4,12 +4,16 @@ internal data class ChapterBackupBook(
     val bookId: String,
     val title: String,
     val author: String?,
+    val description: String? = null,
+    val introduce: String? = null,
+    val coverUrl: String? = null,
 )
 
 internal data class ChapterBackupChapter(
     val chapterId: String,
     val title: String,
     val index: Int,
+    val divisionTitle: String,
     val content: String,
 )
 
@@ -30,6 +34,15 @@ internal data class ChapterBackupResult(
     val skippedCount: Int,
     val outputLabel: String,
 )
+
+internal enum class ChapterBackupFormat(
+    val displayName: String,
+    val extension: String,
+    val mimeType: String,
+) {
+    TXT("TXT", "txt", "text/plain"),
+    EPUB("EPUB", "epub", "application/epub+zip"),
+}
 
 internal data class ChapterBackupNaming(
     val directoryName: String,

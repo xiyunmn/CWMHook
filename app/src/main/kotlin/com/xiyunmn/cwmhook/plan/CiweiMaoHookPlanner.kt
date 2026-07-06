@@ -1,6 +1,6 @@
 package com.xiyunmn.cwmhook.plan
 
-import com.xiyunmn.cwmhook.app.FloatingModulePanelFeature
+import com.xiyunmn.cwmhook.app.ModuleSettingsFeature
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
@@ -33,8 +33,8 @@ object CiweiMaoHookPlanner {
                 HookInstallEntry("ChapterBackupFeature.install") { classLoader ->
                     ChapterBackupFeature.install(module, classLoader)
                 },
-                HookInstallEntry("FloatingModulePanelFeature.install") { classLoader ->
-                    FloatingModulePanelFeature.install(module, classLoader)
+                HookInstallEntry("ModuleSettingsFeature.install") { classLoader ->
+                    ModuleSettingsFeature.install(module, classLoader)
                 },
             ),
         )
@@ -67,8 +67,8 @@ object CiweiMaoHookPlanner {
                 HookInstallEntry("ChapterBackupFeature.retryDeferredHooks") { classLoader ->
                     ChapterBackupFeature.retryDeferredHooks(module, classLoader, reason)
                 },
-                HookInstallEntry("FloatingModulePanelFeature.retryDeferredHooks") { classLoader ->
-                    FloatingModulePanelFeature.retryDeferredHooks(module, classLoader, reason)
+                HookInstallEntry("ModuleSettingsFeature.retryDeferredHooks") { classLoader ->
+                    ModuleSettingsFeature.retryDeferredHooks(module, classLoader, reason)
                 },
             ),
         )

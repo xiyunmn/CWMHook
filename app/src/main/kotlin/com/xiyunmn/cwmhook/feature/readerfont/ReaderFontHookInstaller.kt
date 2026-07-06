@@ -39,6 +39,10 @@ internal class ReaderFontHookInstaller(
         install(module, classLoader)
     }
 
+    fun startFontImport(activity: Activity) {
+        settingsInjector.startFontPicker(activity)
+    }
+
     private fun hookFontProvider(module: XposedModule, classLoader: ClassLoader) {
         if (fontHookInstalled) {
             return
@@ -113,19 +117,20 @@ internal class ReaderFontHookInstaller(
         ).also { it.isAccessible = true }
         val hooked = XposedCompat.hookAfter(module, method, "$logTag.Activity.onActivityResult") { chain ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
-            if (activity.javaClass.name != CiweiMaoClasses.READER_TEXT_TYPE_ACTIVITY) {
-                return@hookAfter
-            }
             val requestCode = chain.getArg(0) as? Int ?: return@hookAfter
             val resultCode = chain.getArg(1) as? Int ?: return@hookAfter
             val data = chain.getArg(2) as? Intent
-            settingsInjector.handleActivityResult(
-                activity = activity,
-                activityClass = activity.javaClass,
-                requestCode = requestCode,
-                resultCode = resultCode,
-                data = data,
-            )
+            if (activity.javaClass.name == CiweiMaoClasses.READER_TEXT_TYPE_ACTIVITY) {
+                settingsInjector.handleActivityResult(
+                    activity = activity,
+                    activityClass = activity.javaClass,
+                    requestCode = requestCode,
+                    resultCode = resultCode,
+                    data = data,
+                )
+            } else {
+                settingsInjector.handleImportResult(activity, requestCode, resultCode, data)
+            }
         }
         if (hooked) {
             textTypeResultHookInstalled = true

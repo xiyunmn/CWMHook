@@ -11,7 +11,10 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.InputFilter
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -34,6 +37,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import java.util.Locale
 
@@ -60,10 +64,14 @@ internal class ChapterExportSelectionWindow(
     private lateinit var listView: ListView
     private lateinit var selectAllText: TextView
     private lateinit var directoryText: TextView
+    private lateinit var formatText: TextView
     private lateinit var summaryText: TextView
     private lateinit var estimateText: TextView
     private lateinit var exportButton: TextView
+    private var exportFormat = restoreState?.exportFormat ?: ChapterBackupFormat.EPUB
     private var pendingThemeRefreshReason = ""
+    private val activeDownloadType: String?
+        get() = downloadType ?: restoreState?.downloadType
     private val expandCollapseInterpolator = DecelerateInterpolator()
     private val themeRefreshRunnable = Runnable {
         refreshTheme(pendingThemeRefreshReason.ifBlank { "SkinChangeHelper" })
@@ -160,11 +168,8 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun handleDialogDismissed() {
-        if (!closing && !activity.isFinishing) {
-            RestoreState.capture(this)?.let { state ->
-                pendingRestore = state
-                ModuleFileLogger.i(TAG, "Chapter export selector pending restore captured: book=${state.book.bookId}, loaded=${state.hasCandidates}")
-            }
+        if (!closing) {
+            capturePendingRestore("dialog dismissed")
         }
         unregisterWindow(this)
         rootView?.removeCallbacks(themeRefreshRunnable)
@@ -245,6 +250,7 @@ internal class ChapterExportSelectionWindow(
     private fun applyRestoreState(state: RestoreState) {
         book = state.book
         customBaseName = state.customBaseName
+        exportFormat = state.exportFormat
         candidates = state.candidates
         candidateById = state.candidates.associateBy { it.chapterId }
         expandedDivisions.clear()
@@ -354,14 +360,21 @@ internal class ChapterExportSelectionWindow(
                     addRule(RelativeLayout.CENTER_VERTICAL)
                 },
             )
+            formatText = TextView(activity).apply {
+                text = exportFormat.displayName
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(theme.titleRightText)
+                includeFontPadding = false
+                minWidth = dp(62)
+                setPadding(dp(10), 0, dp(10), 0)
+                isClickable = true
+                background = strokeRoundRect(Color.TRANSPARENT, theme.titleRightText, dp(14).toFloat(), 1)
+                setOnClickListener { showFormatDialog() }
+            }
             addView(
-                TextView(activity).apply {
-                    text = "TXT"
-                    textSize = 16f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(theme.accentText)
-                    includeFontPadding = false
-                },
+                formatText,
                 RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     marginStart = dp(84)
                     addRule(RelativeLayout.ALIGN_PARENT_START)
@@ -386,6 +399,77 @@ internal class ChapterExportSelectionWindow(
                     addRule(RelativeLayout.CENTER_VERTICAL)
                 },
             )
+        }
+    }
+
+    private fun showFormatDialog() {
+        val formatDialog = Dialog(activity).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setCanceledOnTouchOutside(true)
+        }
+        val panel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundRect(theme.rowBackground, dp(14).toFloat())
+            addView(
+                TextView(activity).apply {
+                    text = "导出格式"
+                    textSize = 17f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(theme.titleText)
+                    includeFontPadding = false
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)),
+            )
+            ChapterBackupFormat.values().forEachIndexed { index, format ->
+                if (index > 0) {
+                    addView(separator(theme.divider), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
+                }
+                addView(
+                    TextView(activity).apply {
+                        text = if (format == exportFormat) "${format.displayName}  ✓" else format.displayName
+                        textSize = 16f
+                        gravity = Gravity.CENTER
+                        setTextColor(if (format == exportFormat) theme.titleRightText else theme.primaryText)
+                        typeface = if (format == exportFormat) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                        includeFontPadding = false
+                        isClickable = true
+                        setOnClickListener {
+                            if (exportFormat != format) {
+                                exportFormat = format
+                                updateFormatText()
+                                Toast.makeText(activity, "已切换为 ${format.displayName}", Toast.LENGTH_SHORT).show()
+                            }
+                            formatDialog.dismiss()
+                        }
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)),
+                )
+            }
+        }
+        formatDialog.setContentView(
+            FrameLayout(activity).apply {
+                addView(
+                    panel,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                )
+            },
+        )
+        formatDialog.setOnShowListener {
+            formatDialog.window?.apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                setDimAmount(0.45f)
+                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                setLayout((activity.resources.displayMetrics.widthPixels * 0.58f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+                applySystemBars(this)
+            }
+        }
+        formatDialog.show()
+    }
+
+    private fun updateFormatText() {
+        if (::formatText.isInitialized) {
+            formatText.text = exportFormat.displayName
         }
     }
 
@@ -662,11 +746,12 @@ internal class ChapterExportSelectionWindow(
             activity,
             currentBook,
             selected,
-            downloadType,
+            activeDownloadType,
             currentNaming(currentBook),
+            exportFormat,
             object : ChapterBackupExporter.DownloadCallback {
                 override fun onStarted() {
-                    ModuleFileLogger.i(TAG, "Selected chapter export started: selected=${selected.size}")
+                    ModuleFileLogger.i(TAG, "Selected chapter export started: format=${exportFormat.displayName}, selected=${selected.size}")
                     exportButton.isEnabled = false
                     exportButton.alpha = 0.5f
                     summaryText.text = "准备导出..."
@@ -829,6 +914,33 @@ internal class ChapterExportSelectionWindow(
         root.postDelayed(themeRefreshRunnable, 220L)
     }
 
+    private fun capturePendingRestore(reason: String) {
+        val state = RestoreState.capture(this) ?: return
+        synchronized(activeWindows) {
+            pendingRestore = state
+        }
+        ModuleFileLogger.i(
+            TAG,
+            "Chapter export selector pending restore captured: reason=$reason activity=${state.activityClassName} book=${state.book.bookId}, loaded=${state.hasCandidates}",
+        )
+    }
+
+    private fun detachFromDestroyedHost() {
+        val currentDialog = dialog
+        currentDialog?.setOnDismissListener(null)
+        rootView?.removeCallbacks(themeRefreshRunnable)
+        dialog = null
+        rootView = null
+        closing = false
+        runCatching {
+            if (currentDialog?.isShowing == true) {
+                currentDialog.dismiss()
+            }
+        }.onFailure { throwable ->
+            ModuleFileLogger.w(TAG, "Failed to dismiss destroyed chapter export selector", throwable)
+        }
+    }
+
     private fun isShowing(): Boolean {
         return dialog?.isShowing == true && rootView != null
     }
@@ -853,16 +965,12 @@ internal class ChapterExportSelectionWindow(
 
     private fun animateVisibleRowsAfterExpandCollapse() {
         listView.post {
-            val offset = dp(4).toFloat()
             repeat(listView.childCount) { index ->
                 val child = listView.getChildAt(index) ?: return@repeat
                 child.animate().cancel()
-                child.alpha = 0.72f
-                child.translationY = offset
+                child.alpha = 0.86f
                 child.animate()
                     .alpha(1f)
-                    .translationY(0f)
-                    .setStartDelay((index * EXPAND_COLLAPSE_STAGGER_MS).coerceAtMost(EXPAND_COLLAPSE_MAX_STAGGER_MS))
                     .setDuration(EXPAND_COLLAPSE_ANIM_MS)
                     .setInterpolator(expandCollapseInterpolator)
                     .start()
@@ -924,6 +1032,8 @@ internal class ChapterExportSelectionWindow(
         }
         val first = if (::listView.isInitialized) listView.firstVisiblePosition else 0
         theme = HostPageTheme.from(activity)
+        currentDialog.window?.setBackgroundDrawable(ColorDrawable(theme.mainBackground))
+        currentDialog.window?.decorView?.setBackgroundColor(theme.mainBackground)
         val root = createRoot()
         rootView = root
         currentDialog.setContentView(root)
@@ -939,7 +1049,6 @@ internal class ChapterExportSelectionWindow(
         } else {
             listView.adapter = LoadingAdapter()
         }
-        ChapterBackupSkinBridge.refreshTree(root)
         ModuleFileLogger.i(TAG, "Chapter export selector theme refreshed: reason=$reason skin=${theme.skinKey}")
     }
 
@@ -1014,9 +1123,7 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun chunkTitle(chunk: List<ChapterBackupCandidate>): String {
-        val first = chunk.firstOrNull() ?: return "目录段"
-        val prefix = if (first.index > 0) "第${first.index}章 " else ""
-        return "$prefix${first.title}(共${chunk.size}章)"
+        return chunk.firstOrNull()?.title?.takeIf { it.isNotBlank() } ?: "目录段"
     }
 
     private inner class LoadingAdapter : BaseAdapter() {
@@ -1152,7 +1259,7 @@ internal class ChapterExportSelectionWindow(
                     addView(arrowView(expanded), LinearLayout.LayoutParams(dp(22), ViewGroup.LayoutParams.MATCH_PARENT))
                     addView(
                         TextView(activity).apply {
-                            text = row.title
+                            text = groupTitleText(row)
                             textSize = 15f
                             setTextColor(theme.primaryText)
                             maxLines = 1
@@ -1194,6 +1301,19 @@ internal class ChapterExportSelectionWindow(
                 LinearLayout.LayoutParams(dp(95), ViewGroup.LayoutParams.MATCH_PARENT),
             )
             layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(49))
+        }
+    }
+
+    private fun groupTitleText(row: Row.Group): CharSequence {
+        val suffix = "(共${row.count}章)"
+        val text = row.title + suffix
+        return SpannableString(text).apply {
+            setSpan(
+                ForegroundColorSpan(theme.secondaryText),
+                row.title.length,
+                text.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
         }
     }
 
@@ -1393,8 +1513,11 @@ internal class ChapterExportSelectionWindow(
     }
 
     data class RestoreState(
+        val activityClassName: String,
         val book: ChapterBackupBook,
         val customBaseName: String?,
+        val downloadType: String?,
+        val exportFormat: ChapterBackupFormat,
         val candidates: List<ChapterBackupCandidate>,
         val selectedIds: List<String>,
         val expandedDivisions: List<String>,
@@ -1413,8 +1536,11 @@ internal class ChapterExportSelectionWindow(
             fun capture(window: ChapterExportSelectionWindow): RestoreState? {
                 val currentBook = window.book ?: return null
                 return RestoreState(
+                    activityClassName = window.activity.javaClass.name,
                     book = currentBook,
                     customBaseName = window.customBaseName,
+                    downloadType = window.activeDownloadType,
+                    exportFormat = window.exportFormat,
                     candidates = window.candidates,
                     selectedIds = window.selectedIds.toList(),
                     expandedDivisions = window.expandedDivisions.toList(),
@@ -1512,10 +1638,8 @@ internal class ChapterExportSelectionWindow(
         private const val CHUNK_SIZE = 10
         private const val TAG = "CWMHook.ChapterExport"
         private const val PAGE_ANIM_MS = 320L
-        private const val EXPAND_COLLAPSE_ANIM_MS = 280L
-        private const val EXPAND_COLLAPSE_STAGGER_MS = 10L
-        private const val EXPAND_COLLAPSE_MAX_STAGGER_MS = 60L
-        private const val RESTORE_TTL_MS = 12_000L
+        private const val EXPAND_COLLAPSE_ANIM_MS = 120L
+        private const val RESTORE_TTL_MS = 60_000L
         private const val NAMING_SELECTION_COLOR = 0x6633B5E5
         private const val NAMING_CURSOR_COLOR = 0xFF33B5E5.toInt()
         private val activeWindows = LinkedHashSet<ChapterExportSelectionWindow>()
@@ -1533,6 +1657,15 @@ internal class ChapterExportSelectionWindow(
             }
         }
 
+        fun captureActiveForHostChange(reason: String) {
+            val windows = synchronized(activeWindows) { activeWindows.toList() }
+            windows.forEach { window ->
+                if (!window.closing) {
+                    window.capturePendingRestore(reason)
+                }
+            }
+        }
+
         fun scheduleHostSkinRefresh(reason: String) {
             val windows = synchronized(activeWindows) { activeWindows.toList() }
             if (windows.isEmpty()) {
@@ -1541,14 +1674,29 @@ internal class ChapterExportSelectionWindow(
             windows.forEach { it.scheduleThemeRefresh(reason) }
         }
 
+        fun handleHostActivityDestroy(activity: Activity, reason: String) {
+            val windows = synchronized(activeWindows) {
+                activeWindows.filter { it.activity === activity }
+            }
+            windows.forEach { window ->
+                if (!window.closing) {
+                    window.capturePendingRestore(reason)
+                }
+                unregisterWindow(window)
+                window.detachFromDestroyedHost()
+            }
+        }
+
         fun restoreIfNeeded(
             activity: Activity,
             exporter: ChapterBackupExporter,
             bookInfo: Any?,
             downloadType: String?,
+            reason: String = "catalog entry",
         ): Boolean {
             val currentBook = bookInfo?.toChapterBackupBook()
             val state = synchronized(activeWindows) {
+                pruneInactiveWindowsLocked()
                 if (activeWindows.isNotEmpty()) {
                     return false
                 }
@@ -1560,19 +1708,50 @@ internal class ChapterExportSelectionWindow(
                 if (currentBook != null && currentBook.bookId != pending.book.bookId) {
                     return false
                 }
+                if (!isCompatibleActivity(activity, pending)) {
+                    return false
+                }
                 pendingRestore = null
                 pending
             }
             activity.window.decorView.postDelayed(
                 {
-                    if (!activity.isFinishing) {
-                        ChapterExportSelectionWindow(activity, exporter, bookInfo, downloadType, state).show()
-                        ModuleFileLogger.i(TAG, "Chapter export selector restored after host recreate: book=${state.book.bookId}, loaded=${state.hasCandidates}")
+                    if (!activity.isFinishing && !activity.isDestroyedCompat()) {
+                        ChapterExportSelectionWindow(activity, exporter, bookInfo, downloadType ?: state.downloadType, state).show()
+                        ModuleFileLogger.i(
+                            TAG,
+                            "Chapter export selector restored after host recreate: reason=$reason activity=${activity.javaClass.name} book=${state.book.bookId}, loaded=${state.hasCandidates}",
+                        )
                     }
                 },
-                180L,
+                80L,
             )
             return true
+        }
+
+        private fun pruneInactiveWindowsLocked() {
+            val iterator = activeWindows.iterator()
+            while (iterator.hasNext()) {
+                val window = iterator.next()
+                if (!window.isShowing() || window.activity.isFinishing || window.activity.isDestroyedCompat()) {
+                    window.rootView?.removeCallbacks(window.themeRefreshRunnable)
+                    iterator.remove()
+                }
+            }
+        }
+
+        private fun isCompatibleActivity(activity: Activity, state: RestoreState): Boolean {
+            val current = activity.javaClass.name
+            return current == state.activityClassName ||
+                current.isCatalogActivityName() && state.activityClassName.isCatalogActivityName()
+        }
+
+        private fun Activity.isDestroyedCompat(): Boolean {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed
+        }
+
+        private fun String.isCatalogActivityName(): Boolean {
+            return this == CiweiMaoClasses.CATALOG_ACTIVITY || this == CiweiMaoClasses.CATALOG_ACTIVITY_LANDSCAPE
         }
     }
 }

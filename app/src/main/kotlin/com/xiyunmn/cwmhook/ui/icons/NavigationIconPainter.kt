@@ -1,11 +1,11 @@
-package com.xiyunmn.cwmhook.ui.panel
+package com.xiyunmn.cwmhook.ui.icons
 
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 
-internal object PanelNavigationIconPainter {
+internal object NavigationIconPainter {
     fun drawHome(canvas: Canvas, paint: Paint, rect: RectF, cx: Float, cy: Float, size: Float) {
         val path = Path()
         path.moveTo(cx - size * 0.62f, cy - size * 0.05f)

@@ -10,6 +10,9 @@ object CiweiMaoClasses {
     const val DG_FRAME_ACTIVITY = "com.kuangxiangciweimao.novel.activity.frame.call.DGFrameActivity"
     const val RECOMMEND_FRAGMENT = "com.kuangxiangciweimao.novel.activity.frame.FragRecommendNew"
     const val READER_ACTIVITY = "com.kuangxiangciweimao.novel.activity.bookshelf.reader.ReaderActivity4"
+    const val CATALOG_ACTIVITY = "com.kuangxiangciweimao.novel.activity.bookshelf.reader.catalog.CatalogActivity2"
+    const val CATALOG_ACTIVITY_LANDSCAPE =
+        "com.kuangxiangciweimao.novel.activity.bookshelf.reader.catalog.CatalogActivity2_LANDSCAPE"
     const val CATALOG_FRAGMENT = "com.kuangxiangciweimao.novel.activity.bookshelf.reader.catalog.FragmentCatalog3"
     const val BUY_DOWN_THREAD = "com.kuangxiangciweimao.novel.activity.bookshelf.reader.buy.BuyDownThread"
     const val READER_TEXT_TYPE_ACTIVITY =
@@ -38,6 +41,7 @@ object CiweiMaoClasses {
 object CiweiMaoIds {
     const val MAIN_TAB_GROUP = "tab"
     const val FLOATING_ENTRY = "animation_view"
+    const val READER_MORE_LAYOUT = "iv_more_layout"
     const val MAIN_VIEW_PAGER = "viewPage"
     const val VIEW_PAGER_ALT = "viewPager"
     const val VIEW_PAGER_LOWER = "viewpager"

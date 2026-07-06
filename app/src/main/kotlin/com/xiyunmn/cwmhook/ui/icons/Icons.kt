@@ -1,4 +1,4 @@
-package com.xiyunmn.cwmhook.ui.panel
+package com.xiyunmn.cwmhook.ui.icons
 
 import android.content.Context
 import android.graphics.Canvas
@@ -12,6 +12,20 @@ enum class IconType {
     UI,
     AD,
     DOWNLOAD,
+    STATUS_BAR,
+    BOTTOM_TAB,
+    CHAPTER_EXPORT,
+    FONT,
+    FONT_IMPORT,
+    FONT_MANAGE,
+    AUTO_SIGN_IN,
+    STARTUP_TAB,
+    PLAY,
+    PLAY_PAUSE,
+    CHECK,
+    RADIO_SELECTED,
+    CHEVRON_RIGHT,
+    FOLDER_OPEN,
     MORE,
     VISIBLE,
     ORDER,
@@ -29,36 +43,6 @@ enum class IconType {
     HELP,
 }
 
-class TileIconView(
-    context: Context,
-    private val iconType: IconType,
-    private val accent: Int,
-    private val backgroundColor: Int,
-) : View(context) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rect = RectF()
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val radius = iconDp(context, 12).toFloat()
-        paint.style = Paint.Style.FILL
-        paint.color = backgroundColor
-        rect.set(0f, 0f, width.toFloat(), height.toFloat())
-        canvas.drawRoundRect(rect, radius, radius, paint)
-        PanelIconPainter.draw(
-            canvas = canvas,
-            paint = paint,
-            rect = rect,
-            iconType = iconType,
-            color = accent,
-            strokeWidth = iconDp(context, 2).toFloat(),
-            cx = width / 2f,
-            cy = height / 2f,
-            size = min(width, height) * 0.42f,
-        )
-    }
-}
-
 class InlineIconView(
     context: Context,
     private val iconType: IconType,
@@ -69,7 +53,7 @@ class InlineIconView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        PanelIconPainter.draw(
+        IconPainter.draw(
             canvas = canvas,
             paint = paint,
             rect = rect,
@@ -78,7 +62,7 @@ class InlineIconView(
             strokeWidth = iconDp(context, 2).toFloat(),
             cx = width / 2f,
             cy = height / 2f,
-            size = min(width, height) * 0.42f,
+            size = min(width, height) * 0.48f,
         )
     }
 }

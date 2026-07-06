@@ -1,6 +1,8 @@
 package com.xiyunmn.cwmhook.app
 
 import android.app.Activity
+import android.content.Intent
+import android.os.Process
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -20,44 +22,42 @@ import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
-import com.xiyunmn.cwmhook.feature.panel.FloatingPanelEntryResolver
-import com.xiyunmn.cwmhook.feature.panel.FloatingPanelHookInstaller
+import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
+import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsEntryResolver
+import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsHookInstaller
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
-import com.xiyunmn.cwmhook.ui.panel.FloatingPanelWindow
-import com.xiyunmn.cwmhook.ui.panel.ModuleSettingsPanel
+import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPage
+import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPageWindow
 import io.github.libxposed.api.XposedModule
 import java.util.WeakHashMap
 
-object FloatingModulePanelFeature {
-    private const val TAG = "CWMHook.FloatingPanel"
+object ModuleSettingsFeature {
+    private const val TAG = "CWMHook.ModuleSettings"
 
-    private val entryResolver = FloatingPanelEntryResolver()
-    private val hookInstaller = FloatingPanelHookInstaller(
+    private val entryResolver = ModuleSettingsEntryResolver()
+    private val hookInstaller = ModuleSettingsHookInstaller(
         logTag = TAG,
-        onFragmentEntryReady = ::attachLongPressEntry,
         onBookShelfEntryReady = ::attachBookShelfLongPressEntry,
-        onMainFrameActivityReady = ::attachMainFrameEntry,
-        isBackKey = FloatingPanelWindow::isBackKey,
-        hasPanel = FloatingPanelWindow::hasPanel,
-        closePanel = { activity, reason -> closeExistingPanel(activity, reason) },
+        onMainFrameActivityReady = ::onMainFrameActivityReady,
+        onReaderActivityReady = ::onReaderActivityReady,
+        onMainFrameActivitySaveState = ::onMainFrameActivitySaveState,
+        onMainFrameActivityDestroy = ::onMainFrameActivityDestroy,
+        onHostThemeChangeStarted = ModuleSettingsPageWindow::captureActiveForHostChange,
+        onHostThemeChanged = ::onHostThemeChanged,
+        isBackKey = ModuleSettingsPageWindow::isBackKey,
+        hasPanel = ModuleSettingsPageWindow::hasPanel,
+        closePanel = { activity, reason -> closeExistingSettings(activity, reason) },
     )
     private val attachedEntries = WeakHashMap<View, String>()
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
         hookInstaller.install(module, classLoader)
-        ModuleFileLogger.i(TAG, "Floating module panel feature install requested")
+        ModuleFileLogger.i(TAG, "Module settings feature install requested")
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
         hookInstaller.retryDeferredHooks(module, classLoader, reason)
-    }
-
-    private fun attachLongPressEntry(fragment: Any) {
-        val anchor = entryResolver.fragmentAnchor(fragment) ?: return
-        attachLongPressEntry(anchor, "fragment:initView") {
-            entryResolver.findActivity(anchor.context) ?: entryResolver.fragmentActivity(fragment)
-        }
     }
 
     private fun attachBookShelfLongPressEntry(fragment: Any) {
@@ -67,9 +67,48 @@ object FloatingModulePanelFeature {
         }
     }
 
-    private fun attachMainFrameEntry(activity: Activity, reason: String) {
-        val anchor = entryResolver.mainFrameAnchor(activity) ?: return
-        attachLongPressEntry(anchor, reason) { activity }
+    private fun onMainFrameActivityReady(activity: Activity, reason: String) {
+        restoreSettingsIfNeeded(activity, reason)
+    }
+
+    private fun onReaderActivityReady(activity: Activity, reason: String) {
+        restoreSettingsIfNeeded(activity, reason)
+        attachReaderEntry(activity, reason)
+    }
+
+    private fun attachReaderEntry(activity: Activity, reason: String) {
+        val anchor = entryResolver.readerMoreAnchor(activity) ?: return
+        attachLongPressEntry(anchor, "reader:$reason") { activity }
+    }
+
+    private fun onMainFrameActivitySaveState(activity: Activity, reason: String) {
+        ModuleSettingsPageWindow.captureActiveForHostChange(reason)
+    }
+
+    private fun onMainFrameActivityDestroy(activity: Activity, reason: String) {
+        ModuleSettingsPageWindow.handleHostActivityDestroy(activity, reason)
+        setStatusBarOverlayVisible(activity, false)
+    }
+
+    private fun onHostThemeChanged(reason: String) {
+        ModuleSettingsPageWindow.refreshActiveThemes(reason)
+    }
+
+    private fun restoreSettingsIfNeeded(activity: Activity, reason: String) {
+        ModuleSettingsPageWindow.restoreIfNeeded(
+            activity = activity,
+            createPage = ::createPage,
+            reason = reason,
+            onShown = {
+                setStatusBarOverlayVisible(it, true)
+                ModuleFileLogger.i(TAG, "Module settings page restored/shown: ${it.javaClass.name}")
+            },
+            onReused = {
+                setStatusBarOverlayVisible(it, true)
+                ModuleFileLogger.i(TAG, "Module settings page restore reused: ${it.javaClass.name}")
+            },
+            onClosed = { closeReason -> onSettingsClosed(activity, closeReason) },
+        )
     }
 
     private fun attachLongPressEntry(anchor: View, reason: String, activityProvider: () -> Activity?) {
@@ -79,36 +118,38 @@ object FloatingModulePanelFeature {
         anchor.setOnLongClickListener { view ->
             val activity = entryResolver.findActivity(view.context) ?: activityProvider()
             if (activity == null || activity.isFinishing) {
-                ModuleFileLogger.w(TAG, "Floating panel requested without live Activity")
+                ModuleFileLogger.w(TAG, "Module settings requested without live Activity")
                 return@setOnLongClickListener true
             }
-            showPanel(activity)
+            showSettings(activity)
             true
         }
         anchor.isLongClickable = true
         attachedEntries[anchor] = reason
-        ModuleFileLogger.i(TAG, "Floating panel long press entry attached: $reason")
+        ModuleFileLogger.i(TAG, "Module settings long press entry attached: $reason")
     }
 
-    private fun showPanel(activity: Activity) {
-        FloatingPanelWindow.show(
+    private fun showSettings(activity: Activity) {
+        ModuleSettingsPageWindow.show(
             activity = activity,
-            createPanel = ::createPanel,
+            createPage = ::createPage,
+            restoreState = null,
             onShown = {
                 setStatusBarOverlayVisible(it, true)
-                ModuleFileLogger.i(TAG, "Floating panel shown: ${it.javaClass.name}")
+                ModuleFileLogger.i(TAG, "Module settings page shown: ${it.javaClass.name}")
             },
             onReused = {
                 setStatusBarOverlayVisible(it, true)
-                ModuleFileLogger.i(TAG, "Floating panel reused: ${it.javaClass.name}")
+                ModuleFileLogger.i(TAG, "Module settings page reused: ${it.javaClass.name}")
             },
-            onClosed = { reason -> onPanelClosed(activity, reason) },
+            onClosed = { reason -> onSettingsClosed(activity, reason) },
         )
     }
 
-    private fun createPanel(activity: Activity, overlay: FrameLayout, theme: PanelTheme): View {
-        return ModuleSettingsPanel(
+    private fun createPage(activity: Activity, overlay: FrameLayout, theme: PanelTheme, restoreState: Any?): View {
+        return ModuleSettingsPage(
             activity = activity,
+            overlay = overlay,
             theme = theme,
             initialStatusBarConfig = StatusBarConfigStore.readLocal(activity),
             initialBottomTabConfig = BottomTabConfigStore.readLocal(activity),
@@ -116,14 +157,12 @@ object FloatingModulePanelFeature {
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
             initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
             initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
-            onClearStatusBarCache = {
-                ImmersiveStatusBarFeature.clearColorCache(activity)
-            },
-            onReapplyStatusBar = {
-                ImmersiveStatusBarFeature.reapplyForegroundWindow("manual")
-            },
+            restoreState = restoreState as? ModuleSettingsPage.RestoreState,
             onManualAutoSignIn = {
                 AutoSignInFeature.triggerManual(activity)
+            },
+            onImportReaderFonts = {
+                ReaderFontFeature.startFontImport(activity)
             },
             onChooseChapterBackupDirectory = {
                 ChapterBackupFeature.launchDirectoryPicker(activity)
@@ -145,10 +184,13 @@ object FloatingModulePanelFeature {
                     chapterBackupConfig,
                 )
             },
-            onClose = {
-                FloatingPanelWindow.close(overlay, "save") { reason -> onPanelClosed(activity, reason) }
+            onRestartHost = {
+                restartHost(activity)
             },
-        ).create()
+            onClose = { reason ->
+                ModuleSettingsPageWindow.close(overlay, reason) { closeReason -> onSettingsClosed(activity, closeReason) }
+            },
+        )
     }
 
     private fun saveAllConfigs(
@@ -170,7 +212,7 @@ object FloatingModulePanelFeature {
             chapterBackupConfig,
         )
 
-        BottomTabFeature.applyRuntimeConfig(activity, bottomTabConfig, "floating panel")
+        BottomTabFeature.applyRuntimeConfig(activity, bottomTabConfig, "module settings")
 
         val message = if (
             statusBarSaved &&
@@ -187,13 +229,31 @@ object FloatingModulePanelFeature {
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun logPanelClosed(reason: String) {
-        ModuleFileLogger.i(TAG, "Floating panel closed: $reason")
+    private fun restartHost(activity: Activity) {
+        val launchIntent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
+        if (launchIntent == null) {
+            Toast.makeText(activity, "无法获取宿主启动入口，请手动重启", Toast.LENGTH_LONG).show()
+            ModuleFileLogger.w(TAG, "Host restart requested but launch intent is null")
+            return
+        }
+        ModuleFileLogger.i(TAG, "Restart host requested from module settings")
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        activity.startActivity(launchIntent)
+        activity.window.decorView.postDelayed(
+            {
+                Process.killProcess(Process.myPid())
+            },
+            180L,
+        )
     }
 
-    private fun closeExistingPanel(activity: Activity, reason: String): Boolean {
-        val closed = FloatingPanelWindow.closeExisting(activity, reason) { closeReason ->
-            onPanelClosed(activity, closeReason)
+    private fun logSettingsClosed(reason: String) {
+        ModuleFileLogger.i(TAG, "Module settings closed: $reason")
+    }
+
+    private fun closeExistingSettings(activity: Activity, reason: String): Boolean {
+        val closed = ModuleSettingsPageWindow.closeExisting(activity, reason) { closeReason ->
+            onSettingsClosed(activity, closeReason)
         }
         if (!closed) {
             setStatusBarOverlayVisible(activity, false)
@@ -201,9 +261,9 @@ object FloatingModulePanelFeature {
         return closed
     }
 
-    private fun onPanelClosed(activity: Activity, reason: String) {
+    private fun onSettingsClosed(activity: Activity, reason: String) {
         setStatusBarOverlayVisible(activity, false)
-        logPanelClosed(reason)
+        logSettingsClosed(reason)
     }
 
     private fun setStatusBarOverlayVisible(activity: Activity, visible: Boolean) {

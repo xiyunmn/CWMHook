@@ -1,5 +1,6 @@
 package com.xiyunmn.cwmhook.feature.readerfont
 
+import android.app.Activity
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import io.github.libxposed.api.XposedModule
 
@@ -15,5 +16,9 @@ object ReaderFontFeature {
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
         hookInstaller.retryDeferredHooks(module, classLoader, reason)
+    }
+
+    fun startFontImport(activity: Activity) {
+        hookInstaller.startFontImport(activity)
     }
 }
