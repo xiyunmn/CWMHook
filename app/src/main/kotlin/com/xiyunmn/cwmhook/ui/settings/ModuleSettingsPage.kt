@@ -17,6 +17,8 @@ import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
+import com.xiyunmn.cwmhook.config.debug.DebugConfig
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
@@ -25,6 +27,7 @@ import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
+import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupDestination
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabPanelState
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
@@ -43,6 +46,7 @@ internal class ModuleSettingsPage(
     initialStartupOptimizeConfig: StartupOptimizeConfig,
     initialStartupTabConfig: StartupTabConfig,
     initialChapterBackupConfig: ChapterBackupConfig,
+    initialDebugConfig: DebugConfig,
     restoreState: RestoreState? = null,
     private val onManualAutoSignIn: () -> Unit,
     private val onImportReaderFonts: () -> Unit,
@@ -57,6 +61,7 @@ internal class ModuleSettingsPage(
         StartupOptimizeConfig,
         StartupTabConfig,
         ChapterBackupConfig,
+        DebugConfig,
     ) -> Unit,
     private val onRestartHost: () -> Unit,
     private val onClose: (String) -> Unit,
@@ -68,6 +73,7 @@ internal class ModuleSettingsPage(
     private var startupOptimizeConfig = restoreState?.startupOptimizeConfig ?: initialStartupOptimizeConfig
     private var startupTabConfig = restoreState?.startupTabConfig ?: initialStartupTabConfig
     private var chapterBackupConfig = restoreState?.chapterBackupConfig ?: initialChapterBackupConfig
+    private var debugConfig = restoreState?.debugConfig ?: initialDebugConfig
     private var bottomTabState = BottomTabPanelState.from(bottomTabConfig)
     private var currentPage = restoreState?.pageName?.toPage() ?: Page.Overview
     private var actionRowIndex = 0
@@ -107,6 +113,7 @@ internal class ModuleSettingsPage(
             startupOptimizeConfig = startupOptimizeConfig,
             startupTabConfig = startupTabConfig,
             chapterBackupConfig = chapterBackupConfig,
+            debugConfig = debugConfig,
             pageName = currentPage.name,
         )
     }
@@ -342,6 +349,30 @@ internal class ModuleSettingsPage(
             onOpen = { render(Page.StartupTab) },
             icon = IconType.STARTUP_TAB,
         )
+
+        addSectionTitle("调试")
+        addOverviewRow(
+            title = "启用详细文件日志",
+            subtitle = "写入 cwmhook/logs 文件日志，不影响 LSPosed 日志",
+            enabled = debugConfig.detailedFileLogEnabled,
+            onToggle = {
+                debugConfig = debugConfig.copy(
+                    detailedFileLogEnabled = !debugConfig.detailedFileLogEnabled,
+                    version = DebugConfigStore.nextVersion(debugConfig),
+                )
+                render(Page.Overview)
+            },
+            onOpen = null,
+            icon = IconType.HELP,
+        )
+        addActionRow(
+            title = "清理文件日志",
+            subtitle = "删除 cwmhook/logs 下的日志文件",
+            icon = IconType.DELETE,
+        ) {
+            val cleared = ModuleFileLogger.clear(activity)
+            toast(if (cleared) "文件日志已清理" else "清理失败，请查看 LSPosed 日志")
+        }
     }
 
     private fun renderChapterBackupPage() {
@@ -626,6 +657,7 @@ internal class ModuleSettingsPage(
             startupOptimizeConfig,
             startupTabConfig,
             chapterBackupConfig,
+            debugConfig,
         )
         onClose("save")
     }
@@ -640,6 +672,7 @@ internal class ModuleSettingsPage(
             startupOptimizeConfig,
             startupTabConfig,
             chapterBackupConfig,
+            debugConfig,
         )
         onClose("save-restart")
         activity.window.decorView.postDelayed({ onRestartHost() }, 250L)
@@ -664,6 +697,7 @@ internal class ModuleSettingsPage(
         startupOptimizeConfig = StartupOptimizeConfigStore.defaultConfig()
         startupTabConfig = StartupTabConfigStore.defaultConfig()
         chapterBackupConfig = ChapterBackupConfigStore.defaultConfig()
+        debugConfig = DebugConfigStore.defaultConfig()
         toast("已恢复默认草稿，保存后生效")
         render(currentPage)
     }
@@ -834,6 +868,7 @@ internal class ModuleSettingsPage(
         val startupOptimizeConfig: StartupOptimizeConfig,
         val startupTabConfig: StartupTabConfig,
         val chapterBackupConfig: ChapterBackupConfig,
+        val debugConfig: DebugConfig,
         val pageName: String,
     )
 

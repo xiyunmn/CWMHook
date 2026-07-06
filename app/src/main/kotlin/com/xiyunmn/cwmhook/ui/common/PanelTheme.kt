@@ -27,6 +27,7 @@ data class PanelTheme(
         return when (icon) {
             IconType.TAB,
             IconType.UI,
+            IconType.AD,
             IconType.DOWNLOAD,
             IconType.STATUS_BAR,
             IconType.BOTTOM_TAB,
@@ -40,10 +41,12 @@ data class PanelTheme(
             IconType.TIMER,
             IconType.PLAY,
             IconType.PLAY_PAUSE,
+            IconType.CHECK,
             IconType.FOLDER_OPEN,
             IconType.RESET,
             IconType.DELETE,
-            IconType.POWER -> accent
+            IconType.POWER,
+            IconType.HELP -> accent
             else -> subIcon
         }
     }

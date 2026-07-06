@@ -48,7 +48,7 @@ internal class ModuleSettingsRows(
                     hasDisclosure = onOpen != null,
                 )
             },
-            rowParams(),
+            rowParams(subtitle.isNotBlank()),
         )
         content.addView(separator(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
     }
@@ -61,7 +61,7 @@ internal class ModuleSettingsRows(
                     onClick()
                 }
             },
-            rowParams(),
+            rowParams(subtitle.isNotBlank()),
         )
         content.addView(separator(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
     }
@@ -85,13 +85,13 @@ internal class ModuleSettingsRows(
                     LinearLayout.LayoutParams(dp(activity, 54), ViewGroup.LayoutParams.MATCH_PARENT),
                 )
             },
-            rowParams(),
+            rowParams(hasSubtitle = false),
         )
         content.addView(separator(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
     }
 
     fun addInfoRow(title: String, subtitle: String) {
-        content.addView(createBaseRow(title, subtitle), rowParams())
+        content.addView(createBaseRow(title, subtitle), rowParams(subtitle.isNotBlank()))
         content.addView(separator(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
     }
 
@@ -147,6 +147,8 @@ internal class ModuleSettingsRows(
                     textSize = 15f
                     gravity = Gravity.CENTER_VERTICAL
                     setTextColor(theme.text)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
                     includeFontPadding = false
                 },
                 LinearLayout.LayoutParams(
@@ -160,10 +162,11 @@ internal class ModuleSettingsRows(
                         text = subtitle
                         textSize = 11f
                         setTextColor(theme.subText)
-                        maxLines = 1
+                        maxLines = 2
                         ellipsize = TextUtils.TruncateAt.END
                         includeFontPadding = false
-                        setPadding(0, dp(activity, 5), 0, 0)
+                        setLineSpacing(0f, 1.05f)
+                        setPadding(0, dp(activity, 4), 0, 0)
                     },
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
                 )
@@ -237,8 +240,9 @@ internal class ModuleSettingsRows(
         )
     }
 
-    private fun rowParams(): LinearLayout.LayoutParams {
-        return LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 62))
+    private fun rowParams(hasSubtitle: Boolean = true): LinearLayout.LayoutParams {
+        val height = if (hasSubtitle) 74 else 62
+        return LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, height))
     }
 
     private fun separator(): View {

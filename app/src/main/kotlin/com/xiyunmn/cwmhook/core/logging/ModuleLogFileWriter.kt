@@ -9,12 +9,14 @@ internal class ModuleLogFileWriter(
     private val maxLogBytes: Long,
     private val maxBackupCount: Int,
 ) {
+    @Synchronized
     fun write(lines: List<String>) {
         if (!dir.exists() && !dir.mkdirs()) {
             return
         }
         val file = File(dir, logFileName)
-        rotateIfNeeded(file)
+        pruneBackups()
+        rotateIfNeeded(file, incomingBytes = estimateBytes(lines))
         FileWriter(file, true).use { writer ->
             lines.forEach { line ->
                 writer.append(line).append('\n')
@@ -22,8 +24,38 @@ internal class ModuleLogFileWriter(
         }
     }
 
-    private fun rotateIfNeeded(file: File) {
-        if (!file.exists() || file.length() < maxLogBytes) {
+    @Synchronized
+    fun clear(): Boolean {
+        if (!dir.exists()) {
+            return true
+        }
+        val files = dir.listFiles() ?: return true
+        var success = true
+        files.forEach { file ->
+            if (file.isFile && !file.delete() && file.exists()) {
+                success = false
+            }
+        }
+        return success
+    }
+
+    private fun estimateBytes(lines: List<String>): Long {
+        return lines.sumOf { it.toByteArray(Charsets.UTF_8).size.toLong() + 1L }
+    }
+
+    private fun pruneBackups() {
+        val files = dir.listFiles() ?: return
+        files.forEach { file ->
+            val suffix = file.name.removePrefix("$logFileName.")
+            val index = suffix.toIntOrNull()
+            if (index != null && index > maxBackupCount) {
+                file.delete()
+            }
+        }
+    }
+
+    private fun rotateIfNeeded(file: File, incomingBytes: Long) {
+        if (!file.exists() || file.length() + incomingBytes <= maxLogBytes) {
             return
         }
         File(dir, "$logFileName.$maxBackupCount").delete()

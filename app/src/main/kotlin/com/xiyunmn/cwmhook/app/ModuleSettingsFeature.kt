@@ -12,6 +12,8 @@ import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
+import com.xiyunmn.cwmhook.config.debug.DebugConfig
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
@@ -160,6 +162,7 @@ object ModuleSettingsFeature {
             initialStartupOptimizeConfig = StartupOptimizeConfigStore.readLocal(activity),
             initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
             initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
+            initialDebugConfig = DebugConfigStore.readLocal(activity),
             restoreState = restoreState as? ModuleSettingsPage.RestoreState,
             onManualAutoSignIn = {
                 AutoSignInFeature.triggerManual(activity)
@@ -182,7 +185,8 @@ object ModuleSettingsFeature {
                     autoSignInConfig,
                     startupOptimizeConfig,
                     startupTabConfig,
-                    chapterBackupConfig ->
+                    chapterBackupConfig,
+                    debugConfig ->
                 saveAllConfigs(
                     activity,
                     statusBarConfig,
@@ -192,6 +196,7 @@ object ModuleSettingsFeature {
                     startupOptimizeConfig,
                     startupTabConfig,
                     chapterBackupConfig,
+                    debugConfig,
                 )
             },
             onRestartHost = {
@@ -212,7 +217,12 @@ object ModuleSettingsFeature {
         startupOptimizeConfig: StartupOptimizeConfig,
         startupTabConfig: StartupTabConfig,
         chapterBackupConfig: ChapterBackupConfig,
+        debugConfig: DebugConfig,
     ) {
+        val debugSaved = DebugConfigStore.writeLocal(activity, debugConfig)
+        if (debugSaved) {
+            ModuleFileLogger.setDetailedFileLoggingEnabled(debugConfig.detailedFileLogEnabled)
+        }
         val statusBarSaved = StatusBarConfigStore.writeLocal(activity, statusBarConfig)
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
@@ -233,7 +243,8 @@ object ModuleSettingsFeature {
             autoSignInSaved &&
             startupOptimizeSaved &&
             startupTabSaved &&
-            chapterBackupSaved
+            chapterBackupSaved &&
+            debugSaved
         ) {
             "已保存，底栏已应用，启动相关设置下次启动生效"
         } else {

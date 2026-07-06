@@ -1,6 +1,7 @@
 #include <android/log.h>
 #include <fcntl.h>
 #include <jni.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -30,7 +31,10 @@ constexpr const char* kLogPath =
     "/data/user/0/com.kuangxiangciweimao.novel/files/cwmhook/logs/native_startup_probe.log";
 constexpr const char* kStartupOptimizePref =
     "/data/user/0/com.kuangxiangciweimao.novel/shared_prefs/cwmhook_startup_optimize.xml";
+constexpr const char* kDebugPref =
+    "/data/user/0/com.kuangxiangciweimao.novel/shared_prefs/cwmhook_debug.xml";
 constexpr off_t kMaxLogBytes = 256 * 1024;
+constexpr int kMaxBackupCount = 2;
 
 std::mutex g_log_mutex;
 std::atomic<int> g_seen_library_count{0};
@@ -38,6 +42,7 @@ std::atomic<int> g_logged_library_count{0};
 int64_t g_base_ms = 0;
 std::atomic<bool> g_target_process{false};
 std::atomic<bool> g_enabled{false};
+std::atomic<bool> g_file_logging_enabled{false};
 
 int64_t now_ms() {
     timespec ts{};
@@ -73,13 +78,13 @@ std::string process_name() {
     return cmdline;
 }
 
-bool pref_boolean_true(const std::string& xml, const char* key) {
+bool pref_boolean_value(const std::string& xml, const char* key, bool default_value) {
     std::string needle = "name=\"";
     needle += key;
     needle += "\"";
     size_t pos = xml.find(needle);
     if (pos == std::string::npos) {
-        return false;
+        return default_value;
     }
     size_t end = xml.find("/>", pos);
     std::string tag = xml.substr(pos, end == std::string::npos ? 160 : end - pos);
@@ -88,7 +93,12 @@ bool pref_boolean_true(const std::string& xml, const char* key) {
 
 bool startup_probe_enabled() {
     std::string pref = read_small_file(kStartupOptimizePref, 8192);
-    return pref_boolean_true(pref, "enabled");
+    return pref_boolean_value(pref, "enabled", false);
+}
+
+bool detailed_file_log_enabled() {
+    std::string pref = read_small_file(kDebugPref, 4096);
+    return pref_boolean_value(pref, "detailed_file_log", false);
 }
 
 std::string lower_ascii(std::string value) {
@@ -121,8 +131,37 @@ void ensure_log_dir() {
     mkdir(kLogDir, 0700);
 }
 
+std::string log_path_for_index(int index) {
+    if (index <= 0) {
+        return kLogPath;
+    }
+    std::string path = kLogPath;
+    path += ".";
+    path += std::to_string(index);
+    return path;
+}
+
+void rotate_log_if_needed(size_t incoming_bytes) {
+    struct stat st {};
+    if (stat(kLogPath, &st) != 0 || st.st_size + static_cast<off_t>(incoming_bytes) <= kMaxLogBytes) {
+        return;
+    }
+    unlink(log_path_for_index(kMaxBackupCount).c_str());
+    for (int index = kMaxBackupCount - 1; index >= 1; --index) {
+        std::string source = log_path_for_index(index);
+        struct stat source_stat {};
+        if (stat(source.c_str(), &source_stat) == 0) {
+            rename(source.c_str(), log_path_for_index(index + 1).c_str());
+        }
+    }
+    rename(kLogPath, log_path_for_index(1).c_str());
+}
+
 void append_line(const std::string& message, bool require_enabled = true) {
     if (!g_target_process.load()) {
+        return;
+    }
+    if (!g_file_logging_enabled.load()) {
         return;
     }
     if (require_enabled && !g_enabled.load()) {
@@ -130,16 +169,6 @@ void append_line(const std::string& message, bool require_enabled = true) {
     }
     std::lock_guard<std::mutex> guard(g_log_mutex);
     ensure_log_dir();
-    int flags = O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
-    struct stat st {};
-    if (stat(kLogPath, &st) == 0 && st.st_size > kMaxLogBytes) {
-        flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC;
-    }
-    int fd = open(kLogPath, flags, 0600);
-    if (fd < 0) {
-        __android_log_write(ANDROID_LOG_WARN, kTag, "failed to open native startup probe log");
-        return;
-    }
     int64_t now = now_ms();
     std::string line = std::to_string(now);
     line += " +";
@@ -147,6 +176,12 @@ void append_line(const std::string& message, bool require_enabled = true) {
     line += "ms ";
     line += message;
     line += "\n";
+    rotate_log_if_needed(line.size());
+    int fd = open(kLogPath, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        __android_log_write(ANDROID_LOG_WARN, kTag, "failed to open native startup probe log");
+        return;
+    }
     write(fd, line.data(), line.size());
     close(fd);
 }
@@ -159,9 +194,12 @@ bool refresh_target_state() {
         return false;
     }
     g_target_process.store(true);
-    g_enabled.store(startup_probe_enabled());
+    g_file_logging_enabled.store(detailed_file_log_enabled());
+    g_enabled.store(g_file_logging_enabled.load() && startup_probe_enabled());
     std::string message = "native_probe_ready enabled=";
     message += g_enabled.load() ? "true" : "false";
+    message += " fileLog=";
+    message += g_file_logging_enabled.load() ? "true" : "false";
     message += " process=";
     message += kTargetProcess;
     message += " pid=";

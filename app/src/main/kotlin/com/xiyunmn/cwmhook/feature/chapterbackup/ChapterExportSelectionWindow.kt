@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -17,6 +18,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -51,6 +53,7 @@ internal class ChapterExportSelectionWindow(
 ) {
     private var dialog: Dialog? = null
     private var rootView: View? = null
+    private var pageView: View? = null
     private var closing = false
     private lateinit var theme: HostPageTheme
     private var book: ChapterBackupBook? = null
@@ -88,11 +91,12 @@ internal class ChapterExportSelectionWindow(
                     ?: book?.defaultExportBaseName()
             }
             val root = createRoot()
-            root.translationX = activity.resources.displayMetrics.widthPixels.toFloat()
+            val page = pageView ?: root
+            page.translationX = activity.resources.displayMetrics.widthPixels.toFloat()
             rootView = root
             dialog = createDialog(root)
             registerWindow(this)
-            playEnterAnimation(root)
+            playEnterAnimation(page)
             ModuleFileLogger.i(TAG, "Chapter export selector shown: activity=${activity.javaClass.name}")
             refreshDirectoryLabel()
             if (restoreState?.hasCandidates == true) {
@@ -109,14 +113,17 @@ internal class ChapterExportSelectionWindow(
 
     private fun createRoot(): View {
         val root = FrameLayout(activity).apply {
-            setBackgroundColor(theme.mainBackground)
+            setBackgroundColor(Color.TRANSPARENT)
             isClickable = true
             isFocusable = true
         }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(theme.mainBackground)
+            isClickable = true
+            isFocusable = true
         }
+        pageView = content
         root.addView(
             content,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -180,6 +187,7 @@ internal class ChapterExportSelectionWindow(
         rootView?.removeCallbacks(themeRefreshRunnable)
         dialog = null
         rootView = null
+        pageView = null
         closing = false
     }
 
@@ -936,6 +944,7 @@ internal class ChapterExportSelectionWindow(
         rootView?.removeCallbacks(themeRefreshRunnable)
         dialog = null
         rootView = null
+        pageView = null
         closing = false
         runCatching {
             if (currentDialog?.isShowing == true) {
@@ -1005,14 +1014,22 @@ internal class ChapterExportSelectionWindow(
             return
         }
         val root = rootView
-        if (root == null || root.width <= 0) {
+        if (root == null) {
             closing = true
             currentDialog.dismiss()
             return
         }
+        stopMovingContentForDismiss()
+        val page = pageView ?: root
+        val targetX = page.width
+            .takeIf { it > 0 }
+            ?: root.width.takeIf { it > 0 }
+            ?: activity.resources.displayMetrics.widthPixels
         closing = true
-        root.animate()
-            .translationX(root.width.toFloat())
+        root.animate().cancel()
+        page.animate().cancel()
+        page.animate()
+            .translationX(targetX.toFloat())
             .setDuration(PAGE_ANIM_MS)
             .setInterpolator(pageInterpolator)
             .withEndAction {
@@ -1021,10 +1038,33 @@ internal class ChapterExportSelectionWindow(
             .start()
     }
 
-    private fun playEnterAnimation(root: View) {
-        root.post {
-            root.translationX = root.width.coerceAtLeast(activity.resources.displayMetrics.widthPixels).toFloat()
-            root.animate()
+    private fun stopMovingContentForDismiss() {
+        if (!::listView.isInitialized) {
+            return
+        }
+        runCatching {
+            val now = SystemClock.uptimeMillis()
+            val cancelEvent = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
+            listView.dispatchTouchEvent(cancelEvent)
+            cancelEvent.recycle()
+        }
+        listView.smoothScrollBy(0, 0)
+        listView.isEnabled = false
+        listView.animate().cancel()
+        listView.clearAnimation()
+        repeat(listView.childCount) { index ->
+            listView.getChildAt(index)?.let { child ->
+                child.animate().cancel()
+                child.clearAnimation()
+            }
+        }
+    }
+
+    private fun playEnterAnimation(page: View) {
+        page.post {
+            page.translationX = page.width.coerceAtLeast(activity.resources.displayMetrics.widthPixels).toFloat()
+            page.animate().cancel()
+            page.animate()
                 .translationX(0f)
                 .setDuration(PAGE_ANIM_MS)
                 .setInterpolator(pageInterpolator)
@@ -1042,6 +1082,7 @@ internal class ChapterExportSelectionWindow(
         currentDialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         currentDialog.window?.decorView?.setBackgroundColor(Color.TRANSPARENT)
         val root = createRoot()
+        pageView?.translationX = 0f
         rootView = root
         currentDialog.setContentView(root)
         currentDialog.window?.apply { configureWindow(this) }

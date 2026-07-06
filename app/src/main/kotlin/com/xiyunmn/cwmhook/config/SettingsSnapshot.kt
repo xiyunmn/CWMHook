@@ -18,5 +18,5 @@ data class SettingsSnapshot(
 
 data class ReservedSettings(
     val statusBar: Boolean = true,
-    val fileLogging: Boolean = true,
+    val fileLogging: Boolean = false,
 )

@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import java.io.File
 
 object ModuleFileLogger {
@@ -16,6 +17,7 @@ object ModuleFileLogger {
     private const val MAX_BACKUP_COUNT = 4
     private const val MAX_EARLY_LINES = 240
     private const val MAX_THROTTLE_KEYS = 256
+    private const val MAX_LINE_CHARS = 32 * 1024
 
     private val lock = Any()
     private val earlyLines = ArrayDeque<String>()
@@ -25,17 +27,21 @@ object ModuleFileLogger {
     private var handler: Handler? = null
     private var writer: ModuleLogFileWriter? = null
     private var initialized = false
+    private var fileLoggingEnabled = false
     private var droppedEarlyLines = 0
 
     fun init(context: Context, processName: String) {
         val appContext = context.applicationContext ?: context
         val dir = File(appContext.filesDir, LOG_DIR)
+        val enabled = DebugConfigStore.readLocal(appContext).detailedFileLogEnabled
         val linesToFlush: List<String>
         synchronized(lock) {
             if (initialized) {
+                fileLoggingEnabled = enabled
                 return
             }
             initialized = true
+            fileLoggingEnabled = enabled
             writer = ModuleLogFileWriter(
                 dir = dir,
                 logFileName = LOG_FILE,
@@ -59,6 +65,39 @@ object ModuleFileLogger {
             }
         }
         enqueue(linesToFlush)
+    }
+
+    fun setDetailedFileLoggingEnabled(enabled: Boolean) {
+        if (!enabled) {
+            log(Log.INFO, TAG, "Detailed file logging disabled")
+        }
+        synchronized(lock) {
+            fileLoggingEnabled = enabled
+        }
+        if (enabled) {
+            log(Log.INFO, TAG, "Detailed file logging enabled")
+        }
+    }
+
+    fun clear(context: Context): Boolean {
+        val appContext = context.applicationContext ?: context
+        val dir = File(appContext.filesDir, LOG_DIR)
+        val currentWriter = synchronized(lock) {
+            handler?.removeCallbacksAndMessages(null)
+            writer
+        }
+        return try {
+            currentWriter?.clear()
+                ?: ModuleLogFileWriter(
+                    dir = dir,
+                    logFileName = LOG_FILE,
+                    maxLogBytes = MAX_LOG_BYTES,
+                    maxBackupCount = MAX_BACKUP_COUNT,
+                ).clear()
+        } catch (throwable: Throwable) {
+            Log.e(TAG, "Failed to clear module log files", throwable)
+            false
+        }
     }
 
     fun i(tag: String, message: String, throwable: Throwable? = null) {
@@ -89,16 +128,20 @@ object ModuleFileLogger {
     }
 
     fun log(priority: Int, tag: String, message: String, throwable: Throwable? = null) {
-        val line = ModuleLogLineFormatter.format(priority, tag, message, throwable)
+        val line = trimLine(ModuleLogLineFormatter.format(priority, tag, message, throwable))
         val currentHandler = synchronized(lock) {
-            handler.also {
-                if (it == null) {
+            val current = handler
+            when {
+                current == null -> {
                     if (earlyLines.size >= MAX_EARLY_LINES) {
                         earlyLines.removeFirst()
                         droppedEarlyLines += 1
                     }
                     earlyLines.addLast(line)
+                    null
                 }
+                fileLoggingEnabled -> current
+                else -> null
             }
         }
         currentHandler?.post {
@@ -114,11 +157,20 @@ object ModuleFileLogger {
     }
 
     private fun writeLines(lines: List<String>) {
-        val currentWriter = synchronized(lock) { writer } ?: return
+        val currentWriter = synchronized(lock) {
+            if (fileLoggingEnabled) writer else null
+        } ?: return
         try {
             currentWriter.write(lines)
         } catch (throwable: Throwable) {
             Log.e(TAG, "Failed to write module log", throwable)
         }
+    }
+
+    private fun trimLine(line: String): String {
+        if (line.length <= MAX_LINE_CHARS) {
+            return line
+        }
+        return line.take(MAX_LINE_CHARS) + "\n... truncated by CWMHook file logger ..."
     }
 }
