@@ -3,6 +3,7 @@
 .idea/
 build/
 */build/
+app/.cxx/
 app/release/
 local.properties
 *.iml

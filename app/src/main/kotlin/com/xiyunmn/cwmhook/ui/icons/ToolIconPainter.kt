@@ -142,6 +142,31 @@ internal object ToolIconPainter {
         canvas.drawArc(rect, -170f, 250f, false, paint)
     }
 
+    fun drawNetwork(canvas: Canvas, paint: Paint, cx: Float, cy: Float, size: Float) {
+        val leftX = cx - size * 0.48f
+        val rightX = cx + size * 0.48f
+        val topY = cy - size * 0.32f
+        val bottomY = cy + size * 0.34f
+        canvas.drawLine(leftX, topY, cx, cy + size * 0.02f, paint)
+        canvas.drawLine(rightX, topY, cx, cy + size * 0.02f, paint)
+        canvas.drawLine(cx, cy + size * 0.02f, cx, bottomY, paint)
+        canvas.drawCircle(leftX, topY, size * 0.14f, paint)
+        canvas.drawCircle(rightX, topY, size * 0.14f, paint)
+        canvas.drawCircle(cx, cy + size * 0.02f, size * 0.14f, paint)
+        canvas.drawCircle(cx, bottomY, size * 0.14f, paint)
+    }
+
+    fun drawTimer(canvas: Canvas, paint: Paint, rect: RectF, cx: Float, cy: Float, size: Float) {
+        canvas.drawCircle(cx, cy + size * 0.08f, size * 0.54f, paint)
+        canvas.drawLine(cx - size * 0.18f, cy - size * 0.58f, cx + size * 0.18f, cy - size * 0.58f, paint)
+        canvas.drawLine(cx, cy - size * 0.58f, cx, cy - size * 0.44f, paint)
+        canvas.drawLine(cx + size * 0.34f, cy - size * 0.38f, cx + size * 0.48f, cy - size * 0.52f, paint)
+        canvas.drawLine(cx, cy + size * 0.08f, cx, cy - size * 0.2f, paint)
+        canvas.drawLine(cx, cy + size * 0.08f, cx + size * 0.26f, cy + size * 0.28f, paint)
+        rect.set(cx - size * 0.32f, cy - size * 0.24f, cx + size * 0.32f, cy + size * 0.4f)
+        canvas.drawArc(rect, 205f, 105f, false, paint)
+    }
+
     fun drawPlay(canvas: Canvas, paint: Paint, cx: Float, cy: Float, size: Float) {
         canvas.drawCircle(cx, cy, size * 0.62f, paint)
         val path = Path()

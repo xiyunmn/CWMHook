@@ -36,6 +36,8 @@ data class PanelTheme(
             IconType.FONT_MANAGE,
             IconType.AUTO_SIGN_IN,
             IconType.STARTUP_TAB,
+            IconType.NETWORK,
+            IconType.TIMER,
             IconType.PLAY,
             IconType.PLAY_PAUSE,
             IconType.FOLDER_OPEN,

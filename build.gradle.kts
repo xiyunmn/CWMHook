@@ -165,6 +165,19 @@ tasks.register("verifyArchitecture") {
                 "libxposed java_init.list must point to $expectedEntry, found: $javaInitEntries",
             )
         }
+
+        val nativeInit = file("app/src/main/resources/META-INF/xposed/native_init.list")
+        if (nativeInit.exists()) {
+            val nativeInitEntries = nativeInit.readLines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+            val expectedNativeEntry = "libcwmhook_startup_probe.so"
+            if (nativeInitEntries != listOf(expectedNativeEntry)) {
+                throw org.gradle.api.GradleException(
+                    "libxposed native_init.list must point to $expectedNativeEntry, found: $nativeInitEntries",
+                )
+            }
+        }
     }
 }
 

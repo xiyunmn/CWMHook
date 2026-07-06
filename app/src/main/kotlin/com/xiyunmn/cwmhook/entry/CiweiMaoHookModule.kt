@@ -1,9 +1,16 @@
 package com.xiyunmn.cwmhook.entry
 
+import android.app.Activity
 import android.app.Application
+import android.content.Context
+import android.os.Bundle
 import android.util.Log
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.feature.startupprobe.NativeStartupProbeLoader
+import com.xiyunmn.cwmhook.feature.startupprobe.StartupNetworkTaskProbe
+import com.xiyunmn.cwmhook.feature.startupprobe.StartupTimelineProbe
+import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import com.xiyunmn.cwmhook.plan.CiweiMaoHookPlanner
 import com.xiyunmn.cwmhook.plan.HookInstaller
@@ -19,6 +26,7 @@ class CiweiMaoHookModule : XposedModule() {
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         XposedCompat.attach(this)
         processName = param.processName
+        StartupTimelineProbe.mark("moduleLoaded", processName)
         log(Log.INFO, TAG, "Module loaded in process $processName")
         ModuleFileLogger.i(TAG, "Module loaded in process $processName")
     }
@@ -39,11 +47,46 @@ class CiweiMaoHookModule : XposedModule() {
             "Target package ready: package=${param.packageName}, " +
                 "process=$processName, classLoader=${param.classLoader}"
         )
+        StartupTimelineProbe.mark("packageReady", processName)
+        NativeStartupProbeLoader.load()
         installStartupProbe(param.classLoader)
         HookInstaller.install(CiweiMaoHookPlanner.packageReadyPlan(this, processName), param.classLoader)
     }
 
     private fun installStartupProbe(classLoader: ClassLoader) {
+        installApplicationAttachProbe()
+        installApplicationOnCreateProbe(classLoader)
+        installActivityStartupProbe()
+    }
+
+    private fun installApplicationAttachProbe() {
+        val attach = runCatching {
+            Application::class.java.getDeclaredMethod("attach", Context::class.java).also { it.isAccessible = true }
+        }.getOrElse { throwable ->
+            log(Log.ERROR, TAG, "Failed to install Application.attach probe", throwable)
+            ModuleFileLogger.e(TAG, "Failed to install Application.attach probe", throwable)
+            return
+        }
+        val hooked = XposedCompat.interceptProtective(this, attach, "$TAG.Application.attach") { chain ->
+            val applicationName = chain.thisObject.javaClass.name
+            val baseContext = chain.getArg(0) as? Context
+            if (baseContext != null) {
+                ModuleFileLogger.init(baseContext, processName)
+                StartupTimelineProbe.configure(baseContext, "Application.attach:$applicationName")
+                StartupNetworkTaskProbe.configure(baseContext)
+            }
+            StartupTimelineProbe.mark("Application.attach.begin", startupClassLabel(applicationName))
+            val result = chain.proceed()
+            StartupTimelineProbe.mark("Application.attach.end", startupClassLabel(applicationName))
+            result
+        }
+        if (!hooked) {
+            log(Log.ERROR, TAG, "Failed to install Application.attach probe")
+            ModuleFileLogger.e(TAG, "Failed to install Application.attach probe")
+        }
+    }
+
+    private fun installApplicationOnCreateProbe(classLoader: ClassLoader) {
         val onCreate = runCatching { Application::class.java.getDeclaredMethod("onCreate") }.getOrElse { throwable ->
             log(Log.ERROR, TAG, "Failed to install startup probe", throwable)
             ModuleFileLogger.e(TAG, "Failed to install startup probe", throwable)
@@ -54,7 +97,10 @@ class CiweiMaoHookModule : XposedModule() {
             val applicationName = chain.thisObject.javaClass.name
             if (application != null) {
                 ModuleFileLogger.init(application, processName)
+                StartupTimelineProbe.configure(application, "Application.onCreate:$applicationName")
+                StartupNetworkTaskProbe.configure(application)
             }
+            StartupTimelineProbe.mark("Application.onCreate.begin", startupClassLabel(applicationName))
             log(
                 Log.INFO,
                 TAG,
@@ -75,6 +121,10 @@ class CiweiMaoHookModule : XposedModule() {
                     )
                 }
                 ModuleFileLogger.i(TAG, "Application.onCreate end: $applicationName")
+                StartupTimelineProbe.mark("Application.onCreate.end", startupClassLabel(applicationName))
+                if (applicationName == CiweiMaoClasses.APP) {
+                    StartupTimelineProbe.dumpOnce("realApplication.onCreate")
+                }
                 result
             } catch (throwable: Throwable) {
                 ModuleFileLogger.e(TAG, "Application.onCreate failed: $applicationName", throwable)
@@ -84,6 +134,61 @@ class CiweiMaoHookModule : XposedModule() {
         if (!hooked) {
             log(Log.ERROR, TAG, "Failed to install startup probe")
             ModuleFileLogger.e(TAG, "Failed to install startup probe")
+        }
+    }
+
+    private fun installActivityStartupProbe() {
+        XposedCompat.hookAfter(
+            this,
+            Activity::class.java.getDeclaredMethod("onCreate", Bundle::class.java),
+            "$TAG.Activity.onCreate.startupProbe",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            val label = startupActivityLabel(activity.javaClass.name) ?: return@hookAfter
+            StartupTimelineProbe.configure(activity, "Activity.onCreate:$label")
+            StartupTimelineProbe.mark("Activity.onCreate", label)
+            if (activity.javaClass.name == CiweiMaoClasses.MAIN_FRAME_ACTIVITY) {
+                StartupTimelineProbe.dumpOnce("MainFrameActivity.onCreate")
+            }
+        }
+        XposedCompat.hookAfter(
+            this,
+            Activity::class.java.getDeclaredMethod("onResume"),
+            "$TAG.Activity.onResume.startupProbe",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            val label = startupActivityLabel(activity.javaClass.name) ?: return@hookAfter
+            StartupTimelineProbe.mark("Activity.onResume", label)
+        }
+        XposedCompat.hookAfter(
+            this,
+            Activity::class.java.getDeclaredMethod("onPostResume"),
+            "$TAG.Activity.onPostResume.startupProbe",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            val label = startupActivityLabel(activity.javaClass.name) ?: return@hookAfter
+            StartupTimelineProbe.mark("Activity.onPostResume", label)
+            if (activity.javaClass.name == CiweiMaoClasses.MAIN_FRAME_ACTIVITY) {
+                StartupTimelineProbe.dumpOnce("MainFrameActivity.onPostResume")
+            }
+        }
+    }
+
+    private fun startupClassLabel(className: String): String {
+        return when (className) {
+            CiweiMaoClasses.STUB_APP -> "StubApp"
+            CiweiMaoClasses.APP -> "App"
+            else -> className.substringAfterLast('.')
+        }
+    }
+
+    private fun startupActivityLabel(className: String): String? {
+        return when (className) {
+            CiweiMaoClasses.SPLASH_ACTIVITY -> "SplashActivity"
+            CiweiMaoClasses.WELCOME_ACTIVITY -> "WelcomeActivity"
+            CiweiMaoClasses.ADVERTISEMENT_ACTIVITY -> "AdvertisementActivity"
+            CiweiMaoClasses.MAIN_FRAME_ACTIVITY -> "MainFrameActivity"
+            else -> null
         }
     }
 

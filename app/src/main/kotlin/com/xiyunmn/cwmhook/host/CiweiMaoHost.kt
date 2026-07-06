@@ -6,6 +6,8 @@ object CiweiMaoPackages {
 }
 
 object CiweiMaoClasses {
+    const val STUB_APP = "com.stub.StubApp"
+    const val APP = "com.kuangxiangciweimao.novel.App"
     const val SPLASH_ACTIVITY = "com.kuangxiangciweimao.novel.activity.SplashActivity"
     const val WELCOME_ACTIVITY = "com.kuangxiangciweimao.novel.activity.WelcomeActivity"
     const val WELCOME_ACTIVITY_HANDLER = "com.kuangxiangciweimao.novel.activity.WelcomeActivity\$1"
@@ -29,6 +31,7 @@ object CiweiMaoClasses {
     const val CHAPTER_CRYPTO = "com.bbs.css.a"
     const val BASE64_HELPER = "com.kuangxiangciweimao.novel.activity.booklist.ada.b"
     const val BASE_TASK_NEW = "com.kuangxiangciweimao.novel.task.newtask.BaseTaskNew"
+    const val NET_UTILS = "com.kuangxiangciweimao.novel.utils.NetUtils"
     const val CHECK_DOWN_TASK = "com.kuangxiangciweimao.novel.task.task.my.CheckDownTask"
     const val SIGN_TASK = "com.kuangxiangciweimao.novel.task.task.my.SignTask"
     const val SETTINGS_MY = "com.kuangxiangciweimao.novel.common.Settings_My"

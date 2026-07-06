@@ -507,6 +507,35 @@ internal class ModuleSettingsPage(
             onOpen = null,
             icon = IconType.CHECK,
         )
+        addSectionTitle("网络与任务")
+        addOverviewRow(
+            title = "关闭网络详细日志",
+            subtitle = "减少 native 网络请求中的日志开销",
+            enabled = startupOptimizeConfig.disableNativeNetworkLog,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    disableNativeNetworkLog = !startupOptimizeConfig.disableNativeNetworkLog,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.NETWORK,
+        )
+        addOverviewRow(
+            title = "延后非首屏任务",
+            subtitle = "版本检查、开关拉取、签到状态等在首屏稳定后执行",
+            enabled = startupOptimizeConfig.delayAuxiliaryStartupTasks,
+            onToggle = {
+                startupOptimizeConfig = startupOptimizeConfig.copy(
+                    delayAuxiliaryStartupTasks = !startupOptimizeConfig.delayAuxiliaryStartupTasks,
+                    version = StartupOptimizeConfigStore.nextVersion(startupOptimizeConfig),
+                )
+                render(Page.StartupOptimize)
+            },
+            onOpen = null,
+            icon = IconType.TIMER,
+        )
     }
 
     private fun renderBottomTabPage() {
@@ -664,8 +693,10 @@ internal class ModuleSettingsPage(
             startupOptimizeConfig.skipThirdPartySplash,
             startupOptimizeConfig.disableStartPagePrefetch,
             startupOptimizeConfig.skipAdvertisementActivity,
+            startupOptimizeConfig.disableNativeNetworkLog,
+            startupOptimizeConfig.delayAuxiliaryStartupTasks,
         ).count { it }
-        return "已启用 $enabledItems/4 项"
+        return "已启用 $enabledItems/6 项"
     }
 
     private fun chapterBackupPathLabel(): String {

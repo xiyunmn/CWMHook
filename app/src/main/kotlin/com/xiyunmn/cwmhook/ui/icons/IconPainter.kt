@@ -36,6 +36,8 @@ internal object IconPainter {
             IconType.FONT_MANAGE -> ToolIconPainter.drawFontManage(canvas, paint, rect, cx, cy, size)
             IconType.AUTO_SIGN_IN -> ToolIconPainter.drawCalendarCheck(canvas, paint, rect, cx, cy, size)
             IconType.STARTUP_TAB -> ToolIconPainter.drawRoute(canvas, paint, rect, cx, cy, size)
+            IconType.NETWORK -> ToolIconPainter.drawNetwork(canvas, paint, cx, cy, size)
+            IconType.TIMER -> ToolIconPainter.drawTimer(canvas, paint, rect, cx, cy, size)
             IconType.PLAY -> ToolIconPainter.drawPlay(canvas, paint, cx, cy, size)
             IconType.PLAY_PAUSE -> ToolIconPainter.drawPlayPause(canvas, paint, rect, cx, cy, size)
             IconType.CHECK -> ToolIconPainter.drawCheck(canvas, paint, cx, cy, size)

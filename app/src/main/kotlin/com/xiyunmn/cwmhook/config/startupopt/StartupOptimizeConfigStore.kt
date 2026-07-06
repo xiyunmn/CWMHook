@@ -9,6 +9,8 @@ data class StartupOptimizeConfig(
     val skipThirdPartySplash: Boolean,
     val disableStartPagePrefetch: Boolean,
     val skipAdvertisementActivity: Boolean,
+    val disableNativeNetworkLog: Boolean,
+    val delayAuxiliaryStartupTasks: Boolean,
     val version: Int,
 )
 
@@ -20,6 +22,8 @@ object StartupOptimizeConfigStore {
     private const val KEY_SKIP_THIRD_PARTY_SPLASH = "skip_third_party_splash"
     private const val KEY_DISABLE_START_PAGE_PREFETCH = "disable_start_page_prefetch"
     private const val KEY_SKIP_ADVERTISEMENT_ACTIVITY = "skip_advertisement_activity"
+    private const val KEY_DISABLE_NATIVE_NETWORK_LOG = "disable_native_network_log"
+    private const val KEY_DELAY_AUXILIARY_STARTUP_TASKS = "delay_auxiliary_startup_tasks"
     private const val KEY_VERSION = "version"
 
     fun defaultConfig(): StartupOptimizeConfig {
@@ -29,6 +33,8 @@ object StartupOptimizeConfigStore {
             skipThirdPartySplash = true,
             disableStartPagePrefetch = true,
             skipAdvertisementActivity = true,
+            disableNativeNetworkLog = true,
+            delayAuxiliaryStartupTasks = false,
             version = 0,
         )
     }
@@ -49,6 +55,14 @@ object StartupOptimizeConfigStore {
                     KEY_SKIP_ADVERTISEMENT_ACTIVITY,
                     defaults.skipAdvertisementActivity,
                 ),
+                disableNativeNetworkLog = prefs.getBoolean(
+                    KEY_DISABLE_NATIVE_NETWORK_LOG,
+                    defaults.disableNativeNetworkLog,
+                ),
+                delayAuxiliaryStartupTasks = prefs.getBoolean(
+                    KEY_DELAY_AUXILIARY_STARTUP_TASKS,
+                    defaults.delayAuxiliaryStartupTasks,
+                ),
                 version = prefs.getInt(KEY_VERSION, defaults.version),
             ),
         )
@@ -63,6 +77,8 @@ object StartupOptimizeConfigStore {
             .putBoolean(KEY_SKIP_THIRD_PARTY_SPLASH, sanitized.skipThirdPartySplash)
             .putBoolean(KEY_DISABLE_START_PAGE_PREFETCH, sanitized.disableStartPagePrefetch)
             .putBoolean(KEY_SKIP_ADVERTISEMENT_ACTIVITY, sanitized.skipAdvertisementActivity)
+            .putBoolean(KEY_DISABLE_NATIVE_NETWORK_LOG, sanitized.disableNativeNetworkLog)
+            .putBoolean(KEY_DELAY_AUXILIARY_STARTUP_TASKS, sanitized.delayAuxiliaryStartupTasks)
             .putInt(KEY_VERSION, sanitized.version)
             .commit()
         if (saved) {
@@ -73,6 +89,8 @@ object StartupOptimizeConfigStore {
                     "skipThirdPartySplash=${sanitized.skipThirdPartySplash}, " +
                     "disableStartPagePrefetch=${sanitized.disableStartPagePrefetch}, " +
                     "skipAdvertisementActivity=${sanitized.skipAdvertisementActivity}, " +
+                    "disableNativeNetworkLog=${sanitized.disableNativeNetworkLog}, " +
+                    "delayAuxiliaryStartupTasks=${sanitized.delayAuxiliaryStartupTasks}, " +
                     "version=${sanitized.version}",
             )
         }

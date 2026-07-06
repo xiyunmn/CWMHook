@@ -6,6 +6,8 @@ import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.feature.startupprobe.StartupNetworkTaskProbe
+import com.xiyunmn.cwmhook.feature.startupprobe.StartupTimelineProbe
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
@@ -35,9 +37,11 @@ object StartupOptimizeHookInstaller {
         installWelcomeSplashHook(module, classLoader)
         installStartPagePrefetchHooks(module, classLoader)
         installAdvertisementFallbackHook(module, classLoader)
+        StartupNetworkTaskProbe.install(module, classLoader)
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
+        StartupNetworkTaskProbe.install(module, classLoader)
         if (allHooksInstalled()) {
             return
         }
@@ -55,6 +59,7 @@ object StartupOptimizeHookInstaller {
             val activity = chain.thisObject as? Activity
             val config = activity?.startupOptimizeConfig()
             if (config?.shouldSkipSelfSplash() == true) {
+                StartupTimelineProbe.mark("StartupOptimize.selfSplashSkipped")
                 ModuleFileLogger.i(TAG, "Self splash skipped before AdvertisementActivity")
                 false
             } else {
@@ -95,6 +100,7 @@ object StartupOptimizeHookInstaller {
                 val config = activity?.startupOptimizeConfig()
                 if (config?.shouldSkipThirdPartySplash() == true) {
                     val delay = chain.getArg(1) as? Long
+                    StartupTimelineProbe.mark("StartupOptimize.thirdPartyDelaySkipped", "delay=$delay")
                     continueWelcomeToMain(activity, "skip third-party splash delay=$delay")
                     true
                 } else {
@@ -120,6 +126,7 @@ object StartupOptimizeHookInstaller {
             val activity = chain.thisObject as? Activity
             val config = activity?.startupOptimizeConfig()
             if (activity != null && config?.shouldSkipThirdPartySplash() == true) {
+                StartupTimelineProbe.mark("StartupOptimize.showAdvTobSkipped")
                 continueWelcomeToMain(activity, "skip showAdvTob")
                 null
             } else {
@@ -145,6 +152,7 @@ object StartupOptimizeHookInstaller {
                         val activity = chain.thisObject as? Activity
                         val config = activity?.startupOptimizeConfig()
                         if (config?.shouldDisableStartPagePrefetch() == true) {
+                            StartupTimelineProbe.mark("StartupOptimize.welcomePrefetchSkipped")
                             ModuleFileLogger.i(TAG, "WelcomeActivity start page prefetch skipped")
                             null
                         } else {
@@ -170,6 +178,7 @@ object StartupOptimizeHookInstaller {
                         val activity = chain.thisObject as? Activity
                         val config = activity?.startupOptimizeConfig()
                         if (config?.shouldDisableStartPagePrefetch() == true) {
+                            StartupTimelineProbe.mark("StartupOptimize.mainPrefetchSkipped")
                             ModuleFileLogger.i(TAG, "MainFrameActivity start page prefetch skipped")
                             null
                         } else {
@@ -203,6 +212,7 @@ object StartupOptimizeHookInstaller {
             if (handler != null) {
                 handler.removeMessages(0)
                 handler.sendEmptyMessage(0)
+                StartupTimelineProbe.mark("StartupOptimize.advertisementFallbackSkipped")
                 ModuleFileLogger.i(TAG, "AdvertisementActivity fallback skipped through host handler")
             } else {
                 ModuleFileLogger.w(TAG, "AdvertisementActivity handler unavailable, fallback skip ignored")
@@ -235,6 +245,7 @@ object StartupOptimizeHookInstaller {
         }
         runCatching {
             method.invoke(activity)
+            StartupTimelineProbe.mark("StartupOptimize.welcomeContinued", reason)
             ModuleFileLogger.i(TAG, "WelcomeActivity continued to main: reason=$reason")
         }.onFailure { throwable ->
             ModuleFileLogger.e(TAG, "WelcomeActivity continue failed: reason=$reason", throwable)

@@ -20,6 +20,8 @@ enum class IconType {
     FONT_MANAGE,
     AUTO_SIGN_IN,
     STARTUP_TAB,
+    NETWORK,
+    TIMER,
     PLAY,
     PLAY_PAUSE,
     CHECK,
