@@ -13,6 +13,8 @@ import android.widget.TextView
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
+import com.xiyunmn.cwmhook.config.bookshelf.BookshelfConfig
+import com.xiyunmn.cwmhook.config.bookshelf.BookshelfConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
@@ -40,6 +42,7 @@ internal class ModuleSettingsPage(
     private val overlay: FrameLayout,
     private val theme: PanelTheme,
     initialStatusBarConfig: StatusBarConfig,
+    initialBookshelfConfig: BookshelfConfig,
     initialBottomTabConfig: BottomTabConfig,
     initialReaderFontConfig: ReaderFontConfig,
     initialAutoSignInConfig: AutoSignInConfig,
@@ -55,6 +58,7 @@ internal class ModuleSettingsPage(
     private val onExportCachedChapters: () -> Unit,
     private val onSave: (
         StatusBarConfig,
+        BookshelfConfig,
         BottomTabConfig,
         ReaderFontConfig,
         AutoSignInConfig,
@@ -67,6 +71,7 @@ internal class ModuleSettingsPage(
     private val onClose: (String) -> Unit,
 ) : LinearLayout(activity), ModuleSettingsPageWindow.RestorablePage {
     private var statusBarConfig = restoreState?.statusBarConfig ?: initialStatusBarConfig
+    private var bookshelfConfig = restoreState?.bookshelfConfig ?: initialBookshelfConfig
     private var bottomTabConfig = restoreState?.bottomTabConfig ?: initialBottomTabConfig
     private var readerFontConfig = restoreState?.readerFontConfig ?: initialReaderFontConfig
     private var autoSignInConfig = restoreState?.autoSignInConfig ?: initialAutoSignInConfig
@@ -107,6 +112,7 @@ internal class ModuleSettingsPage(
         syncChapterBackupPathFromStore()
         return RestoreState(
             statusBarConfig = statusBarConfig,
+            bookshelfConfig = bookshelfConfig,
             bottomTabConfig = bottomTabConfig,
             readerFontConfig = readerFontConfig,
             autoSignInConfig = autoSignInConfig,
@@ -272,6 +278,20 @@ internal class ModuleSettingsPage(
             onToggle = null,
             onOpen = { render(Page.BottomTab) },
             icon = IconType.BOTTOM_TAB,
+        )
+        addOverviewRow(
+            title = "隐藏续读卡片",
+            subtitle = "移除书架页底部“继续阅读”浮层",
+            enabled = bookshelfConfig.hideContinueReadingCard,
+            onToggle = {
+                bookshelfConfig = bookshelfConfig.copy(
+                    hideContinueReadingCard = !bookshelfConfig.hideContinueReadingCard,
+                    version = BookshelfConfigStore.nextVersion(bookshelfConfig),
+                )
+                render(Page.Overview)
+            },
+            onOpen = null,
+            icon = IconType.EYE_OFF,
         )
 
         addSectionTitle("阅读")
@@ -651,6 +671,7 @@ internal class ModuleSettingsPage(
         syncChapterBackupPathFromStore()
         onSave(
             statusBarConfig,
+            bookshelfConfig,
             bottomTabConfig,
             readerFontConfig,
             autoSignInConfig,
@@ -666,6 +687,7 @@ internal class ModuleSettingsPage(
         syncChapterBackupPathFromStore()
         onSave(
             statusBarConfig,
+            bookshelfConfig,
             bottomTabConfig,
             readerFontConfig,
             autoSignInConfig,
@@ -690,6 +712,7 @@ internal class ModuleSettingsPage(
 
     private fun resetDrafts() {
         statusBarConfig = StatusBarConfigStore.defaultConfig()
+        bookshelfConfig = BookshelfConfigStore.defaultConfig()
         bottomTabConfig = BottomTabConfigStore.defaultConfig()
         bottomTabState = BottomTabPanelState.from(bottomTabConfig)
         readerFontConfig = ReaderFontConfigStore.defaultConfig()
@@ -862,6 +885,7 @@ internal class ModuleSettingsPage(
 
     data class RestoreState(
         val statusBarConfig: StatusBarConfig,
+        val bookshelfConfig: BookshelfConfig,
         val bottomTabConfig: BottomTabConfig,
         val readerFontConfig: ReaderFontConfig,
         val autoSignInConfig: AutoSignInConfig,

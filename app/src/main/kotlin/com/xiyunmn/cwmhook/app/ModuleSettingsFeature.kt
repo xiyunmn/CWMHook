@@ -8,6 +8,8 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
+import com.xiyunmn.cwmhook.config.bookshelf.BookshelfConfig
+import com.xiyunmn.cwmhook.config.bookshelf.BookshelfConfigStore
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
@@ -156,6 +158,7 @@ object ModuleSettingsFeature {
             overlay = overlay,
             theme = theme,
             initialStatusBarConfig = StatusBarConfigStore.readLocal(activity),
+            initialBookshelfConfig = BookshelfConfigStore.readLocal(activity),
             initialBottomTabConfig = BottomTabConfigStore.readLocal(activity),
             initialReaderFontConfig = ReaderFontConfigStore.readLocal(activity),
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
@@ -180,6 +183,7 @@ object ModuleSettingsFeature {
                 ChapterBackupFeature.exportCachedBooks(activity)
             },
             onSave = { statusBarConfig,
+                    bookshelfConfig,
                     bottomTabConfig,
                     readerFontConfig,
                     autoSignInConfig,
@@ -190,6 +194,7 @@ object ModuleSettingsFeature {
                 saveAllConfigs(
                     activity,
                     statusBarConfig,
+                    bookshelfConfig,
                     bottomTabConfig,
                     readerFontConfig,
                     autoSignInConfig,
@@ -211,6 +216,7 @@ object ModuleSettingsFeature {
     private fun saveAllConfigs(
         activity: Activity,
         statusBarConfig: StatusBarConfig,
+        bookshelfConfig: BookshelfConfig,
         bottomTabConfig: BottomTabConfig,
         readerFontConfig: ReaderFontConfig,
         autoSignInConfig: AutoSignInConfig,
@@ -224,6 +230,7 @@ object ModuleSettingsFeature {
             ModuleFileLogger.setDetailedFileLoggingEnabled(debugConfig.detailedFileLogEnabled)
         }
         val statusBarSaved = StatusBarConfigStore.writeLocal(activity, statusBarConfig)
+        val bookshelfSaved = BookshelfConfigStore.writeLocal(activity, bookshelfConfig)
         val bottomTabSaved = BottomTabConfigStore.writeLocal(activity, bottomTabConfig)
         val readerFontSaved = ReaderFontConfigStore.writeLocal(activity, readerFontConfig)
         val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
@@ -238,6 +245,7 @@ object ModuleSettingsFeature {
 
         val message = if (
             statusBarSaved &&
+            bookshelfSaved &&
             bottomTabSaved &&
             readerFontSaved &&
             autoSignInSaved &&

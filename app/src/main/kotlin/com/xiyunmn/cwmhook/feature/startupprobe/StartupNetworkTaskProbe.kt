@@ -392,7 +392,6 @@ object StartupNetworkTaskProbe {
         "GetCheckTask",
         "CheckTask1",
         "GetThirdTask",
-        "GetLookPointTask",
         "SignRecordTask",
         "GetNewUserTask",
         "PsonHomePropTask",

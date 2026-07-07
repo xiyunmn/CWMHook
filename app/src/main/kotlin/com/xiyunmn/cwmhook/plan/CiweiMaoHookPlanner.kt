@@ -3,6 +3,7 @@ package com.xiyunmn.cwmhook.plan
 import com.xiyunmn.cwmhook.app.ModuleSettingsFeature
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
+import com.xiyunmn.cwmhook.feature.bookshelf.BookshelfFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
 import com.xiyunmn.cwmhook.feature.startupopt.StartupOptimizeFeature
@@ -21,6 +22,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("BottomTabFeature.install") { classLoader ->
                     BottomTabFeature.install(module, classLoader)
+                },
+                HookInstallEntry("BookshelfFeature.install") { classLoader ->
+                    BookshelfFeature.install(module, classLoader)
                 },
                 HookInstallEntry("StartupOptimizeFeature.install") { classLoader ->
                     StartupOptimizeFeature.install(module, classLoader)
@@ -58,6 +62,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("BottomTabFeature.retryDeferredHooks") { classLoader ->
                     BottomTabFeature.retryDeferredHooks(module, classLoader, reason)
+                },
+                HookInstallEntry("BookshelfFeature.retryDeferredHooks") { classLoader ->
+                    BookshelfFeature.retryDeferredHooks(module, classLoader, reason)
                 },
                 HookInstallEntry("StartupOptimizeFeature.retryDeferredHooks") { classLoader ->
                     StartupOptimizeFeature.retryDeferredHooks(module, classLoader, reason)
