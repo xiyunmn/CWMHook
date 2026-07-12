@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import io.github.libxposed.api.XposedModule
@@ -25,6 +26,7 @@ internal class StatusBarFeatureGraph(
         enabledProvider = { context -> StatusBarConfigStore.readLocal(context).enabled },
         readerMenuVisible = { view -> isReaderMenuVisible(view) },
         transientOverlayVisible = { window -> transientOverlayRegistry.isVisible(window) },
+        registeredMainWindow = windowRegistry::isRegisteredMainWindow,
     )
     private val colorSampler = StatusBarColorSampler(
         viewTreeTools = viewTreeTools,
@@ -85,12 +87,14 @@ internal class StatusBarFeatureGraph(
         applyWindow = { window, reason, forceSample, sceneKeyOverride ->
             runtimeApplier.apply(window, reason, forceSample, sceneKeyOverride)
         },
+        updateReaderMenuSurface = runtimeApplier::updateReaderMenuSurface,
         applyIfNeeded = runtimeApplier::applyIfNeeded,
         shouldManageWindow = runtimeApplier::shouldManageWindow,
         ensureTransparentStatusBarColor = runtimeApplier::ensureTransparentStatusBarColor,
         scheduleApplyForPageView = scheduler::scheduleApplyForPageView,
         scheduleKnownWindows = scheduler::scheduleKnownWindows,
         applyFragmentWindow = scheduler::applyFragmentWindow,
+        isReaderActivity = sceneRules::isReaderActivity,
         logTag = config.logTag,
     )
 
@@ -119,7 +123,7 @@ internal class StatusBarFeatureGraph(
 
     private fun isReaderMenuVisible(root: View): Boolean {
         val titleBar = viewTreeTools.findViewByResourceName(root, "titleBar") ?: return false
-        return titleBar.visibility == View.VISIBLE && titleBar.isShown
+        return titleBar.visibility == View.VISIBLE
     }
 
     fun clearColorCache(context: Context): Boolean {
@@ -150,6 +154,17 @@ internal class StatusBarFeatureGraph(
 
     fun setTransientOverlayVisible(activity: Activity, visible: Boolean) {
         transientOverlayRegistry.setVisible(activity, visible)
+        windowRegistry.state(activity.window).bumpGeneration("transientOverlay:$visible")
+        val contentRoot = activity.window.findViewById<ViewGroup>(android.R.id.content)
+        val overlayColor = contentRoot?.let { scrimController.setOverlay(it, visible) }
+        if (overlayColor != null) {
+            windowController.applySystemBarAppearance(activity.window, activity.window.decorView, overlayColor)
+        }
+        if (!visible) {
+            activity.window.decorView.post {
+                runtimeApplier.apply(activity.window, "transientOverlayClosed", forceSample = true)
+            }
+        }
         ModuleFileLogger.throttled(
             key = "transient-overlay:${activity.javaClass.name}:$visible",
             intervalMs = 500L,

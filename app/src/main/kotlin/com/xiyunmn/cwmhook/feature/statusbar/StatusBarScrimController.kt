@@ -7,10 +7,14 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import java.util.WeakHashMap
 
 internal class StatusBarScrimController(
     private val scrimTag: String,
 ) {
+    private val baseColors = WeakHashMap<View, Int>()
+    private val overlayFractions = WeakHashMap<View, Float>()
+
     fun ensure(contentRoot: ViewGroup, height: Int, color: Int) {
         val scrim = find(contentRoot) ?: run {
             if (contentRoot !is FrameLayout) {
@@ -32,8 +36,10 @@ internal class StatusBarScrimController(
             layoutParams.height = height
             scrim.layoutParams = layoutParams
         }
-        if (solidBackgroundColor(scrim) != color) {
-            scrim.setBackgroundColor(color)
+        baseColors[scrim] = color
+        val displayColor = darken(color, overlayFractions[scrim] ?: 0f)
+        if (solidBackgroundColor(scrim) != displayColor) {
+            scrim.setBackgroundColor(displayColor)
         }
         if (scrim.visibility != View.VISIBLE) {
             scrim.visibility = View.VISIBLE
@@ -43,6 +49,19 @@ internal class StatusBarScrimController(
 
     fun hide(contentRoot: ViewGroup) {
         find(contentRoot)?.visibility = View.GONE
+    }
+
+    fun setOverlay(contentRoot: ViewGroup, visible: Boolean, dimFraction: Float = 0.45f): Int? {
+        val scrim = find(contentRoot) ?: return null
+        if (visible) {
+            overlayFractions[scrim] = dimFraction.coerceIn(0f, 1f)
+        } else {
+            overlayFractions.remove(scrim)
+        }
+        val base = baseColors[scrim] ?: solidBackgroundColor(scrim) ?: return null
+        val display = darken(base, overlayFractions[scrim] ?: 0f)
+        scrim.setBackgroundColor(display)
+        return display
     }
 
     fun find(contentRoot: ViewGroup): View? {
@@ -85,5 +104,16 @@ internal class StatusBarScrimController(
             else -> return null
         }
         return if (Color.alpha(color) >= 230) color else null
+    }
+
+    private fun darken(color: Int, fraction: Float): Int {
+        if (fraction <= 0f) return color
+        val factor = 1f - fraction.coerceIn(0f, 1f)
+        return Color.argb(
+            Color.alpha(color),
+            (Color.red(color) * factor).toInt(),
+            (Color.green(color) * factor).toInt(),
+            (Color.blue(color) * factor).toInt(),
+        )
     }
 }

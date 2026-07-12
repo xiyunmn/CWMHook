@@ -58,6 +58,25 @@ internal class StatusBarWindowRegistry(
         }
     }
 
+    fun unregisterActivityWindow(activity: Activity) {
+        synchronized(windowActivities) {
+            windowActivities.remove(activity.window)
+        }
+        synchronized(windowStates) {
+            if (foregroundWindow === activity.window) {
+                foregroundWindow = null
+            }
+        }
+    }
+
+    fun isRegisteredMainWindow(window: Window): Boolean {
+        synchronized(windowActivities) {
+            val activity = windowActivities[window] ?: return false
+            return activity.window === window && !activity.isFinishing &&
+                (android.os.Build.VERSION.SDK_INT < 17 || !activity.isDestroyed)
+        }
+    }
+
     fun findActivityForWindow(window: Window, decorView: View? = null): Activity? {
         synchronized(windowActivities) {
             windowActivities[window]?.let { return it }

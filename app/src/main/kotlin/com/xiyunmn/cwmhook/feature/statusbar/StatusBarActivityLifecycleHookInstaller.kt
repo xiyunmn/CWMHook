@@ -2,6 +2,7 @@ package com.xiyunmn.cwmhook.feature.statusbar
 
 import android.app.Activity
 import android.os.Bundle
+import android.content.res.Configuration
 import android.view.Window
 import com.xiyunmn.cwmhook.core.XposedCompat
 import io.github.libxposed.api.XposedModule
@@ -9,6 +10,7 @@ import io.github.libxposed.api.XposedModule
 internal class StatusBarActivityLifecycleHookInstaller(
     private val windowRegistry: StatusBarWindowRegistry,
     private val applyWindow: (Window, String, Boolean, String?) -> Unit,
+    private val isReaderActivity: (String) -> Boolean,
     private val logTag: String,
 ) {
     fun install(module: XposedModule) {
@@ -18,8 +20,26 @@ internal class StatusBarActivityLifecycleHookInstaller(
             "$logTag.Activity.onCreate",
         ) { chain ->
             (chain.thisObject as? Activity)?.let {
+                if (isReaderActivity(it.javaClass.name)) return@let
                 windowRegistry.rememberActivityWindow(it)
                 applyWindow(it.window, "Activity.onCreate", false, null)
+            }
+        }
+        XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onConfigurationChanged", Configuration::class.java),
+            "$logTag.Activity.onConfigurationChanged",
+        ) { chain ->
+            val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (isReaderActivity(activity.javaClass.name)) return@hookAfter
+            windowRegistry.rememberActivityWindow(activity)
+            val state = windowRegistry.state(activity.window)
+            state.markDirty(clearCached = false)
+            val decor = activity.window.decorView
+            decor.post {
+                decor.post {
+                    applyWindow(activity.window, "Activity.onConfigurationChanged", true, null)
+                }
             }
         }
         XposedCompat.hookAfter(
@@ -28,6 +48,7 @@ internal class StatusBarActivityLifecycleHookInstaller(
             "$logTag.Activity.onContentChanged",
         ) { chain ->
             (chain.thisObject as? Activity)?.let {
+                if (isReaderActivity(it.javaClass.name)) return@let
                 windowRegistry.rememberActivityWindow(it)
                 applyWindow(it.window, "Activity.onContentChanged", false, null)
             }
@@ -38,8 +59,10 @@ internal class StatusBarActivityLifecycleHookInstaller(
             "$logTag.Activity.onResume",
         ) { chain ->
             (chain.thisObject as? Activity)?.let {
+                if (isReaderActivity(it.javaClass.name)) return@let
                 windowRegistry.rememberActivityWindow(it)
                 windowRegistry.setForegroundWindow(it.window)
+                windowRegistry.state(it.window).bumpGeneration("Activity.onResume")
             }
         }
         XposedCompat.hookAfter(
@@ -48,9 +71,30 @@ internal class StatusBarActivityLifecycleHookInstaller(
             "$logTag.Activity.onPostResume",
         ) { chain ->
             (chain.thisObject as? Activity)?.let {
+                if (isReaderActivity(it.javaClass.name)) return@let
                 windowRegistry.rememberActivityWindow(it)
                 windowRegistry.setForegroundWindow(it.window)
+                it.window.decorView.post {
+                    applyWindow(it.window, "Activity.onPostResume", false, null)
+                }
             }
+        }
+        XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onPause"),
+            "$logTag.Activity.onPause",
+        ) { chain ->
+            (chain.thisObject as? Activity)?.let {
+                windowRegistry.state(it.window).bumpGeneration("Activity.onPause")
+                windowRegistry.clearForegroundWindow(it.window)
+            }
+        }
+        XposedCompat.hookAfter(
+            module,
+            Activity::class.java.getDeclaredMethod("onDestroy"),
+            "$logTag.Activity.onDestroy",
+        ) { chain ->
+            (chain.thisObject as? Activity)?.let(windowRegistry::unregisterActivityWindow)
         }
         XposedCompat.hookAfter(
             module,
@@ -58,11 +102,18 @@ internal class StatusBarActivityLifecycleHookInstaller(
             "$logTag.Activity.onWindowFocusChanged",
         ) { chain ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
+            if (isReaderActivity(activity.javaClass.name)) return@hookAfter
             val hasFocus = chain.getArg(0) as? Boolean ?: return@hookAfter
             windowRegistry.rememberActivityWindow(activity)
             windowRegistry.state(activity.window).setFocus(hasFocus)
             if (hasFocus) {
                 windowRegistry.setForegroundWindow(activity.window)
+                val decor = activity.window.decorView
+                decor.post {
+                    decor.post {
+                        applyWindow(activity.window, "Activity.onWindowFocusChanged", false, null)
+                    }
+                }
             } else {
                 windowRegistry.clearForegroundWindow(activity.window)
             }

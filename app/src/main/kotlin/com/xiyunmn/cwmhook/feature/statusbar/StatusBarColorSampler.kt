@@ -15,6 +15,22 @@ internal class StatusBarColorSampler(
 ) {
     private val renderedSampler = StatusBarRenderedColorSampler(sampleBitmapWidth, sampleBitmapHeight)
 
+    fun sampleSceneTargetColor(appRoot: View, sceneKey: String, topInset: Int): Int? {
+        return when {
+            sceneKey == "main-tab:store" -> sampleCompositedTargetTop(appRoot, listOf("toplay"))
+            sceneKey == "main-tab:rank" -> sampleClosestTarget(appRoot, listOf("titleLay"))
+            sceneKey == "main-tab:shelf" -> sampleCompositedTargetTop(appRoot, listOf("layout_title_bar"))
+            sceneKey == "main-tab:find" -> sampleClosestTarget(appRoot, listOf("titleLay"))
+            sceneKey == "main-tab:mine" -> sampleClosestTarget(appRoot, listOf("mypersoninfo"))
+            sceneKey.endsWith("|detail") -> sampleBookDetailColor(appRoot, topInset)
+            sceneKey.endsWith("|recharge") -> sampleRenderedStrip(appRoot, 1)
+            else -> sampleClosestTarget(
+                appRoot,
+                listOf("titleLayout", "title_layout", "titleLay", "layout_title_bar"),
+            )
+        }
+    }
+
     fun sampleMyHeaderColor(appRoot: View, topInset: Int): Int? {
         val header = viewTreeTools.findViewByResourceName(appRoot, "mypersoninfo") ?: return null
         if (!header.isShown || header.width <= 0 || header.height <= 0) {
@@ -32,12 +48,43 @@ internal class StatusBarColorSampler(
         return null
     }
 
-    fun sampleReaderMenuColor(appRoot: View, topInset: Int): Int? {
-        val titleBar = viewTreeTools.findViewByResourceName(appRoot, "titleBar")?.takeIf { it.isShown } ?: return null
-        val title = viewTreeTools.findViewByResourceName(titleBar, "title")?.takeIf { it.isShown } ?: titleBar
+    private fun sampleBookDetailColor(appRoot: View, topInset: Int): Int? {
+        val title = viewTreeTools.findViewByResourceName(appRoot, "titleLayout")
         scrimController.solidBackgroundColor(title)?.let { return it }
-        val sampleY = minOf(max(1, topInset / 3), max(1, title.height - 1))
-        return sampleRenderedStrip(title, sampleY)
+        return sampleClosestTarget(appRoot, listOf("bookInfoTop"))
+    }
+
+    private fun sampleClosestTarget(appRoot: View, names: List<String>): Int? {
+        val target = names.asSequence()
+            .mapNotNull { viewTreeTools.findViewByResourceName(appRoot, it) }
+            .firstOrNull { it.isShown && it.width > 0 && it.height > 0 }
+            ?: return null
+        return sampleRenderedStrip(target, 1.coerceAtMost(max(1, target.height - 1)))
+            ?: scrimController.solidBackgroundColor(target)
+    }
+
+    private fun sampleCompositedTargetTop(appRoot: View, names: List<String>): Int? {
+        val target = names.asSequence()
+            .mapNotNull { viewTreeTools.findViewByResourceName(appRoot, it) }
+            .firstOrNull { it.isShown && it.width > 0 && it.height > 0 }
+            ?: return null
+        val sampleY = (viewTreeTools.topRelativeToRoot(target, appRoot) + 1)
+            .coerceIn(0, max(0, appRoot.height - 1))
+        return sampleRenderedStrip(appRoot, sampleY)
+            ?: scrimController.solidBackgroundColor(target)
+    }
+
+    private fun sampleNamedTarget(appRoot: View, names: List<String>, topInset: Int): Int? {
+        val target = names.asSequence()
+            .mapNotNull { viewTreeTools.findViewByResourceName(appRoot, it) }
+            .firstOrNull { it.isShown && it.width > 0 && it.height > 0 }
+            ?: return null
+        scrimController.solidBackgroundColor(target)?.let { return it }
+        val sampleY = minOf(
+            max(1, target.height / 6),
+            max(1, target.height - 1),
+        )
+        return sampleRenderedStrip(target, sampleY)
     }
 
     fun scanTopBackgroundColor(appRoot: View, topInset: Int): Int? {

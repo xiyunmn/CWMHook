@@ -9,11 +9,15 @@ internal class StatusBarApplyPolicy(
     private val enabledProvider: (Context) -> Boolean,
     private val readerMenuVisible: (View) -> Boolean,
     private val transientOverlayVisible: (Window) -> Boolean,
+    private val registeredMainWindow: (Window) -> Boolean,
 ) {
     fun applyBlockReason(window: Window): String? {
         val decorView = window.decorView
         if (!isEnabled(decorView.context)) {
             return "disabled"
+        }
+        if (!registeredMainWindow(window)) {
+            return "notActivityMainWindow"
         }
         if (isTransientOverlayVisible(window)) {
             return "transientOverlay"
@@ -26,7 +30,7 @@ internal class StatusBarApplyPolicy(
     }
 
     fun shouldManageWindow(window: Window): Boolean {
-        return isEnabled(window.decorView.context)
+        return isEnabled(window.decorView.context) && registeredMainWindow(window)
     }
 
     fun isReaderBypass(sceneKey: String, decorView: View): Boolean {

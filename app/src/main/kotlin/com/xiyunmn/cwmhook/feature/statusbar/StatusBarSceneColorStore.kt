@@ -10,8 +10,8 @@ internal class StatusBarSceneColorStore(
         state.cachedColor = color
         state.colorDirty = false
         state.rememberActiveColor(color)
-        if (changed) {
-            colorCacheProvider(context).put(state.activeSkinKey, state.activeSceneKey, color)
-        }
+        // Resolved colors describe the current rendered host View. Persisting
+        // them across content, scroll and skin generations is the source of
+        // stale cross-page colors, so v2 keeps them process-local only.
     }
 }

@@ -1,8 +1,11 @@
 package com.xiyunmn.cwmhook.feature.statusbar
 
+import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
 
 internal class StatusBarSkinChangeHookInstaller(
     private val scheduleKnownWindows: (String) -> Unit,
@@ -21,12 +24,41 @@ internal class StatusBarSkinChangeHookInstaller(
             classLoader,
         )
         var installed = false
-        installed = hookHelper.hookMethodIfPresent(module, helperClass, "switchSkinMode", String::class.java, listenerClass) {
-            scheduleKnownWindows("SkinChangeHelper.switchSkinMode")
-        } || installed
-        installed = hookHelper.hookMethodIfPresent(module, helperClass, "refreshSkin", listenerClass) {
-            scheduleKnownWindows("SkinChangeHelper.refreshSkin")
-        } || installed
+        listOf(
+            helperClass.getDeclaredMethod("switchSkinMode", String::class.java, listenerClass),
+            helperClass.getDeclaredMethod("refreshSkin", listenerClass),
+        ).forEach { method ->
+            val listenerIndex = method.parameterTypes.lastIndex
+            installed = XposedCompat.interceptProtective(
+                module,
+                method,
+                "$logTag.SkinChangeHelper.${method.name}",
+            ) { chain ->
+                val args = chain.getArgs().toTypedArray()
+                val original = args.getOrNull(listenerIndex)
+                if (original != null) {
+                    args[listenerIndex] = Proxy.newProxyInstance(
+                        listenerClass.classLoader,
+                        arrayOf(listenerClass),
+                    ) { _, callback, callbackArgs ->
+                        val result = try {
+                            callback.invoke(original, *(callbackArgs ?: emptyArray()))
+                        } catch (throwable: InvocationTargetException) {
+                            throw throwable.targetException
+                        }
+                        if (callback.name == "onSuccess") {
+                            scheduleKnownWindows("SkinChangeHelper.${method.name}.onSuccess")
+                        }
+                        result
+                    }
+                }
+                val result = chain.proceed(args)
+                if (original == null) {
+                    scheduleKnownWindows("SkinChangeHelper.${method.name}.noListener")
+                }
+                result
+            } || installed
+        }
 
         if (installed) {
             ModuleFileLogger.i(logTag, "SkinChangeHelper hooks installed")

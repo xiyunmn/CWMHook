@@ -44,44 +44,23 @@ internal class StatusBarColorCoordinator(
         state: StatusBarWindowState,
         fallbackColor: Int,
     ): Int {
-        colorResolver.directSceneColor(appRoot.context, state.activeSkinKey, state.activeSceneKey)?.let { color ->
-            colorStore.remember(appRoot.context, state, color)
-            return color
-        }
-        val specialColor = when {
-            sceneRules.isMyTabScene(state.activeSceneKey) -> colorSampler.sampleMyHeaderColor(appRoot, topInset)
-            sceneRules.isReaderScene(state.activeSceneKey) -> colorSampler.sampleReaderMenuColor(appRoot, topInset)
-            else -> null
-        }
-        if (specialColor != null) {
-            colorStore.remember(appRoot.context, state, specialColor)
+        val targetColor = colorSampler.sampleSceneTargetColor(appRoot, state.activeSceneKey, topInset)
+        if (targetColor != null) {
+            colorStore.remember(appRoot.context, state, targetColor)
             ModuleFileLogger.throttled(
                 key = "special-color:${System.identityHashCode(appRoot)}",
                 intervalMs = 500L,
                 priority = Log.DEBUG,
                 tag = logTag,
                 message = "special color skin=${state.activeSkinKey} scene=${state.activeSceneKey} " +
-                    "color=${formatColor(specialColor)} previous=${formatColor(fallbackColor)}",
+                    "color=${formatColor(targetColor)} previous=${formatColor(fallbackColor)}",
             )
-            return specialColor
+            return targetColor
         }
         if (state.cachedColor != null) {
             return state.cachedColor ?: fallbackColor
         }
-        if (sceneRules.isMyTabScene(state.activeSceneKey) || sceneRules.isReaderScene(state.activeSceneKey)) {
-            return fallbackColor
-        }
-        val scannedColor = colorSampler.scanTopBackgroundColor(appRoot, topInset) ?: return fallbackColor
-        colorStore.remember(appRoot.context, state, scannedColor)
-        ModuleFileLogger.throttled(
-            key = "bgscan:${System.identityHashCode(appRoot)}",
-            intervalMs = 500L,
-            priority = Log.DEBUG,
-            tag = logTag,
-            message = "background scan skin=${state.activeSkinKey} scene=${state.activeSceneKey} " +
-                "color=${formatColor(scannedColor)} previous=${formatColor(fallbackColor)}",
-        )
-        return scannedColor
+        return fallbackColor
     }
 
     fun scheduleRenderedSample(
@@ -94,6 +73,7 @@ internal class StatusBarColorCoordinator(
     ) {
         renderedSampleScheduler.schedule(window, contentRoot, appRoot, topInset, state, forceSample)
     }
+
 
     private fun formatColor(color: Int?): String {
         return color?.let { "#%08X".format(Locale.US, it) } ?: "null"

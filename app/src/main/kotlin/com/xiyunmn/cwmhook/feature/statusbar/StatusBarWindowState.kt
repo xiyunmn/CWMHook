@@ -14,8 +14,16 @@ internal class StatusBarWindowState(
     var lastSampleAt: Long = 0L
     var hasFocus: Boolean = false
     var everFocused: Boolean = false
-    var readerOriginalWindowState: ReaderOriginalWindowState? = null
+    var generation: Long = 0L
+        private set
+    var transientOverlayVisible: Boolean = false
     private val sceneColors: LinkedHashMap<String, Int> = LinkedHashMap()
+
+    fun bumpGeneration(@Suppress("UNUSED_PARAMETER") reason: String) {
+        generation++
+        pendingSample = false
+        pendingApply = false
+    }
 
     fun setFocus(focused: Boolean) {
         hasFocus = focused
@@ -24,6 +32,13 @@ internal class StatusBarWindowState(
 
     fun activate(sceneKey: String, skinKey: String, persistedColor: Int?): Boolean {
         if (activeSceneKey == sceneKey && activeSkinKey == skinKey) {
+            if (cachedColor == null) {
+                sceneColors[cacheKeyBuilder(skinKey, sceneKey)]?.let {
+                    cachedColor = it
+                    colorDirty = false
+                    return true
+                }
+            }
             if (cachedColor == null && persistedColor != null) {
                 cachedColor = persistedColor
                 colorDirty = false
@@ -33,6 +48,8 @@ internal class StatusBarWindowState(
         }
 
         cachedColor?.let { rememberActiveColor(it) }
+        generation++
+        pendingSample = false
         activeSceneKey = sceneKey
         activeSkinKey = skinKey
 
@@ -43,6 +60,8 @@ internal class StatusBarWindowState(
     }
 
     fun markDirty(clearCached: Boolean = false) {
+        generation++
+        pendingSample = false
         colorDirty = true
         if (clearCached) {
             cachedColor = null

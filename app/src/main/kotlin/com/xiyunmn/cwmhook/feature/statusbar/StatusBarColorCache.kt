@@ -109,17 +109,6 @@ internal class StatusBarColorCache(
     }
 
     fun clear() {
-        val storedKeys = prefs.getString(keyListName, "").orEmpty()
-            .split('\n')
-            .filter { it.isNotEmpty() }
-
-        val editor = prefs.edit()
-        // 清除所有 color: 前缀的缓存
-        storedKeys.forEach { cacheKey ->
-            editor.remove(keys.colorPrefKey(cacheKey))
-        }
-        // 清除 keys 列表
-        editor.remove(keyListName)
-        editor.apply()
+        prefs.edit().clear().apply()
     }
 }

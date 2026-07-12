@@ -4,6 +4,7 @@ import android.app.Activity
 import android.view.View
 import android.view.Window
 import java.lang.reflect.Method
+import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 
 internal class StatusBarFeatureScheduler(
     private val mainFrameActivity: String,
@@ -33,7 +34,13 @@ internal class StatusBarFeatureScheduler(
         val windows = windowRegistry.foregroundWindows()
         windows.forEach { window ->
             val decorView = window.decorView
-            decorView.postDelayed({ runtimeApplier.apply(window, reason) }, 80L)
+            val state = windowRegistry.state(window)
+            state.bumpGeneration(reason)
+            decorView.post {
+                decorView.post {
+                    runtimeApplier.apply(window, reason, forceSample = true)
+                }
+            }
         }
     }
 
@@ -45,6 +52,14 @@ internal class StatusBarFeatureScheduler(
         if (className.startsWith("com.bumptech.glide.manager.") || className.contains("RequestManagerFragment")) {
             return
         }
+        if (activity.javaClass.name != mainFrameActivity) return
+        if (
+            className != CiweiMaoClasses.RECOMMEND_FRAGMENT &&
+            className != CiweiMaoClasses.RANK_FRAGMENT &&
+            className != CiweiMaoClasses.BOOK_SHELF_FRAGMENT &&
+            className != CiweiMaoClasses.FIND_FRAGMENT &&
+            className != CiweiMaoClasses.MINE_FRAGMENT
+        ) return
         val window = activity.window
         val state = windowRegistry.state(window)
         if (!windowRegistry.isForegroundWindow(window, state)) {

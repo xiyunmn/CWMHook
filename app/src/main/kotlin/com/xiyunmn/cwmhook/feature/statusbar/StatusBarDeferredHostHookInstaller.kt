@@ -9,6 +9,7 @@ import java.lang.reflect.Method
 internal class StatusBarDeferredHostHookInstaller(
     private val windowRegistry: StatusBarWindowRegistry,
     private val applyWindow: (Window, String, Boolean, String?) -> Unit,
+    private val updateReaderMenuSurface: (Window, Int?) -> Unit,
     private val scheduleApplyForPageView: (View, String) -> Unit,
     private val scheduleKnownWindows: (String) -> Unit,
     private val applyFragmentWindow: (Any?, Method, Method?, String) -> Unit,
@@ -18,6 +19,7 @@ internal class StatusBarDeferredHostHookInstaller(
     private var viewPagerHooksInstalled = false
     private var skinHooksInstalled = false
     private var readerMenuHooksInstalled = false
+    private var bookDetailHooksInstalled = false
     private val hookHelper = StatusBarHostHookHelper(logTag)
     private val fragmentHooks = StatusBarFragmentLifecycleHookInstaller(
         applyFragmentWindow = applyFragmentWindow,
@@ -36,6 +38,11 @@ internal class StatusBarDeferredHostHookInstaller(
     )
     private val readerMenuHooks = StatusBarReaderMenuHookInstaller(
         windowRegistry = windowRegistry,
+        updateReaderMenuSurface = updateReaderMenuSurface,
+        logTag = logTag,
+    )
+    private val bookDetailHooks = StatusBarBookDetailHookInstaller(
+        windowRegistry = windowRegistry,
         applyWindow = applyWindow,
         hookHelper = hookHelper,
         logTag = logTag,
@@ -43,19 +50,15 @@ internal class StatusBarDeferredHostHookInstaller(
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
         installFragmentHooks(module, classLoader)
-        installViewPagerHooks(module, classLoader)
         installSkinHooks(module, classLoader)
         installReaderMenuHooks(module, classLoader)
+        installBookDetailHooks(module, classLoader)
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
         if (!fragmentHooksInstalled) {
             ModuleFileLogger.i(logTag, "Retry fragment hooks: $reason")
             installFragmentHooks(module, classLoader)
-        }
-        if (!viewPagerHooksInstalled) {
-            ModuleFileLogger.i(logTag, "Retry ViewPager hooks: $reason")
-            installViewPagerHooks(module, classLoader)
         }
         if (!skinHooksInstalled) {
             ModuleFileLogger.i(logTag, "Retry skin hooks: $reason")
@@ -64,6 +67,10 @@ internal class StatusBarDeferredHostHookInstaller(
         if (!readerMenuHooksInstalled) {
             ModuleFileLogger.i(logTag, "Retry reader menu hooks: $reason")
             installReaderMenuHooks(module, classLoader)
+        }
+        if (!bookDetailHooksInstalled) {
+            ModuleFileLogger.i(logTag, "Retry book detail hooks: $reason")
+            installBookDetailHooks(module, classLoader)
         }
     }
 
@@ -93,5 +100,10 @@ internal class StatusBarDeferredHostHookInstaller(
             return
         }
         readerMenuHooksInstalled = readerMenuHooks.install(module, classLoader)
+    }
+
+    private fun installBookDetailHooks(module: XposedModule, classLoader: ClassLoader) {
+        if (bookDetailHooksInstalled) return
+        bookDetailHooksInstalled = bookDetailHooks.install(module, classLoader)
     }
 }

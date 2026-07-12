@@ -52,46 +52,39 @@ internal class StatusBarRenderedSampleScheduler(
 
         val sampleSceneKey = state.activeSceneKey
         val sampleSkinKey = state.activeSkinKey
+        val sampleGeneration = state.generation
         state.pendingSample = true
-        appRoot.postDelayed(
+        appRoot.post(
             {
-                state.pendingSample = false
-                if (!canSampleWindow(window)) {
-                    return@postDelayed
-                }
-                state.lastSampleAt = SystemClock.uptimeMillis()
-                if (state.activeSceneKey != sampleSceneKey || state.activeSkinKey != sampleSkinKey) {
-                    return@postDelayed
-                }
-                if (!windowRegistry.isForegroundWindow(window, state)) {
-                    return@postDelayed
-                }
-                if (sceneRules.isReaderScene(sampleSceneKey) && !readerMenuVisible(window.decorView)) {
-                    return@postDelayed
-                }
+                appRoot.post secondFrame@{
+                    state.pendingSample = false
+                    if (!canSampleWindow(window)) return@secondFrame
+                    state.lastSampleAt = SystemClock.uptimeMillis()
+                    if (
+                        state.generation != sampleGeneration ||
+                        state.activeSceneKey != sampleSceneKey ||
+                        state.activeSkinKey != sampleSkinKey
+                    ) return@secondFrame
+                    if (!windowRegistry.isForegroundWindow(window, state)) return@secondFrame
+                    if (sceneRules.isReaderScene(sampleSceneKey) && !readerMenuVisible(window.decorView)) return@secondFrame
 
-                val directColor = colorResolver.directSceneColor(appRoot.context, sampleSkinKey, sampleSceneKey) ?: when {
-                    sceneRules.isMyTabScene(sampleSceneKey) -> colorSampler.sampleMyHeaderColor(appRoot, topInset)
-                    sceneRules.isReaderScene(sampleSceneKey) -> colorSampler.sampleReaderMenuColor(appRoot, topInset)
-                    else -> colorSampler.scanTopBackgroundColor(appRoot, topInset)
+                    val sampledColor = colorSampler.sampleSceneTargetColor(appRoot, sampleSceneKey, topInset)
+                        ?: return@secondFrame
+                    val previous = state.cachedColor
+                    colorStore.remember(appRoot.context, state, sampledColor)
+                    scrimController.hide(contentRoot)
+                    windowController.applySystemBarAppearance(window, window.decorView, sampledColor)
+                    ModuleFileLogger.throttled(
+                        key = "sample:${System.identityHashCode(window)}",
+                        intervalMs = 500L,
+                        priority = Log.DEBUG,
+                        tag = logTag,
+                        message = "${sceneRules.directColorSource(sampleSceneKey, false)} " +
+                            "skin=$sampleSkinKey scene=$sampleSceneKey generation=$sampleGeneration " +
+                            "color=${formatColor(sampledColor)} previous=${formatColor(previous)}",
+                    )
                 }
-                val sampledColor = directColor ?: colorSampler.sampleRenderedStatusBarColor(appRoot, topInset) ?: return@postDelayed
-                val previous = state.cachedColor
-                colorStore.remember(appRoot.context, state, sampledColor)
-
-                scrimController.ensure(contentRoot, topInset, sampledColor)
-                windowController.applySystemBarAppearance(window, window.decorView, sampledColor)
-                ModuleFileLogger.throttled(
-                    key = "sample:${System.identityHashCode(window)}",
-                    intervalMs = 500L,
-                    priority = Log.DEBUG,
-                    tag = logTag,
-                    message = "${sceneRules.directColorSource(sampleSceneKey, directColor != null)} " +
-                        "skin=$sampleSkinKey scene=$sampleSceneKey " +
-                        "color=${formatColor(sampledColor)} previous=${formatColor(previous)}",
-                )
             },
-            sampleDelayMs,
         )
     }
 

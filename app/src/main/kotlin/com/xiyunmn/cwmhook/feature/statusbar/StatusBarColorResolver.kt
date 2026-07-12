@@ -12,13 +12,7 @@ internal class StatusBarColorResolver(
 ) {
     fun currentSkinKey(context: Context): String {
         val settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val followSystem = settings.getBoolean("IsfollowNight", false)
-        val isNight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && followSystem) {
-            context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        } else {
-            context.getSharedPreferences(targetDefaultPref, Context.MODE_PRIVATE).getBoolean("isNight", false)
-        }
-        return if (isNight) {
+        return if (isNightMode(context, settings)) {
             "night"
         } else {
             settings.getString("skinType", "yellow") ?: "yellow"
@@ -35,21 +29,21 @@ internal class StatusBarColorResolver(
     }
 
     fun directSceneColor(context: Context, skinKey: String, sceneKey: String): Int? {
-        return when {
-            sceneRules.isBookStoreHomeScene(sceneKey) -> pageSurfaceColor(context, skinKey)
-            sceneRules.isBookShelfTabScene(sceneKey) -> pageSurfaceColor(context, skinKey)
-            sceneRules.isMainFrameThemeTopScene(sceneKey) -> fallbackColor(context, skinKey)
-            else -> null
-        }
+        // Scene colors are resolved from the host's actual target View. Theme
+        // resource names alone are not sufficient for image, transparent and
+        // collapsing title bars.
+        return null
     }
 
-    private fun pageSurfaceColor(context: Context, skinKey: String): Int {
-        val names = if (skinKey == "night") {
-            listOf("color_bg_1_night", "color_bg_main_night", "color_bg_2_night")
+    private fun isNightMode(context: Context, settings: android.content.SharedPreferences): Boolean {
+        val followSystem = settings.getBoolean("IsfollowNight", false)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && followSystem) {
+            context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
         } else {
-            listOf("color_bg_1", "color_bg_main", "color_bg_2")
+            context.getSharedPreferences(targetDefaultPref, Context.MODE_PRIVATE)
+                .getBoolean("isNight", false)
         }
-        return resourceColor(context, names) ?: if (skinKey == "night") Color.rgb(53, 53, 53) else Color.WHITE
     }
 
     private fun resourceColor(context: Context, names: List<String>): Int? {

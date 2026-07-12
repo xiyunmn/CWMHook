@@ -10,7 +10,7 @@ object ImmersiveStatusBarFeature {
     private const val TAG = "CWMHook.StatusBar"
     private const val CACHE_PREF = "cwmhook_status_bar_cache"
     private const val CACHE_KEYS = "keys"
-    private const val CACHE_VERSION = "bgscan-v4"
+    private const val CACHE_VERSION = "explicit-v1"
     private const val SCRIM_TAG = "cwmhook_status_bar_scrim"
     private const val SAMPLE_BITMAP_WIDTH = 32
     private const val SAMPLE_BITMAP_HEIGHT = 3

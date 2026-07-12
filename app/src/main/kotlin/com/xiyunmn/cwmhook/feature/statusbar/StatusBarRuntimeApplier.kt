@@ -29,11 +29,6 @@ internal class StatusBarRuntimeApplier(
         windowController = windowController,
         readerMenuVisible = readerMenuVisible,
     )
-    private val readerBypassRestorer = StatusBarReaderBypassRestorer(
-        paddingController = paddingController,
-        scrimController = scrimController,
-        logTag = logTag,
-    )
     private val contentInsetApplier = StatusBarContentInsetApplier(
         colorCoordinator = colorCoordinator,
         paddingController = paddingController,
@@ -58,34 +53,24 @@ internal class StatusBarRuntimeApplier(
             }
             val state = windowRegistry.state(window)
             val sceneKey = sceneKeyOverride ?: sceneResolver.resolveWindowSceneKey(window, decorView, state)
-            val skinKey = colorResolver.currentSkinKey(decorView.context)
             val readerScene = sceneRules.isReaderScene(sceneKey)
-            val menuVisible = readerScene && readerMenuVisible(decorView)
-            val persistedColor = if (readerScene && !menuVisible) {
-                null
-            } else {
-                colorCacheProvider(decorView.context).get(skinKey, sceneKey)
+            if (readerScene) {
+                return
             }
+            val skinKey = colorResolver.currentSkinKey(decorView.context)
+            val persistedColor: Int? = null
             val restored = state.activate(sceneKey, skinKey, persistedColor)
             if (forceSample) {
                 state.markDirty(clearCached = true)
             }
 
-            if (readerScene && !menuVisible) {
-                readerBypassRestorer.restore(window, decorView, state, reason, sceneKey, skinKey)
-                return
-            }
-            if (readerScene && state.readerOriginalWindowState == null) {
-                state.readerOriginalWindowState = ReaderOriginalWindowState.from(window, decorView)
-            }
-
             windowController.configureTransparentStatusBar(window, decorView)
-            scrimController.neutralizeStatusBarBackground(decorView.findViewById(android.R.id.statusBarBackground))
 
             val topInset = if (windowController.isFullscreen(window, decorView)) 0 else windowController.statusBarHeight(decorView)
             val surfaceColor = if (topInset > 0) {
                 colorResolver.directSceneColor(decorView.context, skinKey, sceneKey)
                     ?: state.cachedColor
+                    ?: window.statusBarColor.takeIf { Color.alpha(it) == 255 }
                     ?: colorResolver.fallbackColor(decorView.context, skinKey)
             } else {
                 null
@@ -156,6 +141,31 @@ internal class StatusBarRuntimeApplier(
 
     private fun formatColor(color: Int?): String {
         return color?.let { "#%08X".format(Locale.US, it) } ?: "null"
+    }
+
+    fun updateReaderMenuSurface(window: Window, hostColor: Int?) {
+        if (hostColor == null) {
+            windowController.clearReaderStatusBarFrame(window, window.decorView)
+            return
+        }
+        val blockReason = applyPolicy.applyBlockReason(window)
+        if (blockReason != null) {
+            ModuleFileLogger.throttled(
+                key = "reader-direct-filter:${System.identityHashCode(window)}:$blockReason",
+                intervalMs = 800L,
+                priority = Log.DEBUG,
+                tag = logTag,
+                message = "reader direct apply filtered rule=$blockReason",
+            )
+            return
+        }
+        val decorView = window.decorView
+        windowController.applyReaderStatusBarFrame(
+            window,
+            decorView,
+            hostColor,
+            updateIconAppearance = true,
+        )
     }
 
     private fun isApplyBlocked(window: Window, reason: String): Boolean {

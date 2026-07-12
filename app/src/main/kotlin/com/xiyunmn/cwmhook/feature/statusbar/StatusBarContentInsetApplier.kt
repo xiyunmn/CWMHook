@@ -25,13 +25,15 @@ internal class StatusBarContentInsetApplier(
             return
         }
 
-        paddingController.applyTopPadding(appRoot, topInset)
+        // The host already lays its content below the status bar. Adding an
+        // inset here moves every page down and corrupts scroll/transition
+        // geometry. The scrim is an overlay only; always undo legacy padding
+        // from an earlier module process before resolving color.
+        paddingController.restoreTopPadding(appRoot)
         if (topInset > 0 && surfaceColor != null) {
             val resolvedColor = colorCoordinator.resolveTopSurfaceColor(appRoot, topInset, state, surfaceColor)
-            scrimController.ensure(contentRoot, topInset, resolvedColor)
-            if (resolvedColor != surfaceColor) {
-                windowController.applySystemBarAppearance(window, decorView, resolvedColor)
-            }
+            scrimController.hide(contentRoot)
+            windowController.applySystemBarAppearance(window, decorView, resolvedColor)
             colorCoordinator.scheduleRenderedSample(window, contentRoot, appRoot, topInset, state, forceSample)
         } else {
             scrimController.hide(contentRoot)
