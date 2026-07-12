@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CwmChapterPageWindowAnimation">
+        <item name="android:windowEnterAnimation">@anim/cwm_chapter_left_in</item>
+        <item name="android:windowExitAnimation">@anim/cwm_chapter_right_out</item>
+    </style>
+</resources>

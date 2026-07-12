@@ -1,5 +1,6 @@
 package com.xiyunmn.cwmhook.feature.chapterbackup
 
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.Dialog
 import android.content.Context
@@ -24,7 +25,6 @@ import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.AbsListView
@@ -53,7 +53,8 @@ internal class ChapterExportSelectionWindow(
 ) {
     private var dialog: Dialog? = null
     private var rootView: View? = null
-    private var pageView: View? = null
+    private var formatOverlay: View? = null
+    private var formatSystemBarAnimator: ValueAnimator? = null
     private var closing = false
     private lateinit var theme: HostPageTheme
     private var book: ChapterBackupBook? = null
@@ -76,7 +77,6 @@ internal class ChapterExportSelectionWindow(
     private var pendingThemeRefreshReason = ""
     private val activeDownloadType: String?
         get() = downloadType ?: restoreState?.downloadType
-    private val pageInterpolator = AccelerateDecelerateInterpolator()
     private val expandCollapseInterpolator = DecelerateInterpolator()
     private val themeRefreshRunnable = Runnable {
         refreshTheme(pendingThemeRefreshReason.ifBlank { "SkinChangeHelper" })
@@ -91,12 +91,9 @@ internal class ChapterExportSelectionWindow(
                     ?: book?.defaultExportBaseName()
             }
             val root = createRoot()
-            val page = pageView ?: root
-            page.translationX = activity.resources.displayMetrics.widthPixels.toFloat()
             rootView = root
             dialog = createDialog(root)
             registerWindow(this)
-            playEnterAnimation(page)
             ModuleFileLogger.i(TAG, "Chapter export selector shown: activity=${activity.javaClass.name}")
             refreshDirectoryLabel()
             if (restoreState?.hasCandidates == true) {
@@ -123,7 +120,6 @@ internal class ChapterExportSelectionWindow(
             isClickable = true
             isFocusable = true
         }
-        pageView = content
         root.addView(
             content,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -154,7 +150,9 @@ internal class ChapterExportSelectionWindow(
             setOnKeyListener { _, keyCode, event ->
                 if (keyCode == KeyEvent.KEYCODE_BACK) {
                     if (event.action == KeyEvent.ACTION_UP) {
-                        this@ChapterExportSelectionWindow.dismiss()
+                        if (!closeFormatOverlay()) {
+                            this@ChapterExportSelectionWindow.dismiss()
+                        }
                     }
                     true
                 } else {
@@ -162,8 +160,9 @@ internal class ChapterExportSelectionWindow(
                 }
             }
             setOnDismissListener { handleDialogDismissed() }
-            show()
             window?.apply { configureWindow(this) }
+            show()
+            window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
     }
 
@@ -171,7 +170,8 @@ internal class ChapterExportSelectionWindow(
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.attributes = window.attributes.apply {
-            windowAnimations = 0
+            packageName = MODULE_PACKAGE
+            windowAnimations = com.xiyunmn.cwmhook.R.style.CwmChapterPageWindowAnimation
         }
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         window.decorView.setBackgroundColor(Color.TRANSPARENT)
@@ -185,9 +185,11 @@ internal class ChapterExportSelectionWindow(
         }
         unregisterWindow(this)
         rootView?.removeCallbacks(themeRefreshRunnable)
+        formatSystemBarAnimator?.cancel()
+        formatSystemBarAnimator = null
         dialog = null
         rootView = null
-        pageView = null
+        formatOverlay = null
         closing = false
     }
 
@@ -416,68 +418,181 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun showFormatDialog() {
-        val formatDialog = Dialog(activity).apply {
-            requestWindowFeature(Window.FEATURE_NO_TITLE)
-            setCanceledOnTouchOutside(true)
+        if (formatOverlay != null || closing) {
+            return
+        }
+        val root = rootView as? FrameLayout ?: return
+        val overlay = FrameLayout(activity).apply {
+            alpha = 0f
+            setBackgroundColor(0x73000000)
+            isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setOnClickListener { closeFormatOverlay() }
         }
         val panel = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = roundRect(theme.rowBackground, dp(14).toFloat())
+            elevation = dp(10).toFloat()
+            background = roundRect(theme.rowBackground, dp(16).toFloat())
+            isClickable = true
+            setOnClickListener { }
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(20), dp(10), dp(20), 0)
+                    addView(
+                        TextView(activity).apply {
+                            text = "选择导出格式"
+                            textSize = 18f
+                            typeface = Typeface.DEFAULT_BOLD
+                            gravity = Gravity.CENTER_VERTICAL
+                            setTextColor(theme.titleText)
+                            includeFontPadding = false
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)),
+                    )
+                    addView(
+                        TextView(activity).apply {
+                            text = "可在导出前随时更改"
+                            textSize = 13f
+                            gravity = Gravity.CENTER_VERTICAL
+                            setTextColor(theme.secondaryText)
+                            includeFontPadding = false
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(26)),
+                    )
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70)),
+            )
+            addView(separator(theme.divider), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
+            addView(
+                LinearLayout(activity).also(::populateFormatChoices),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
+        val panelWidth = (activity.resources.displayMetrics.widthPixels - dp(48)).coerceAtMost(dp(380))
+        overlay.addView(
+            panel,
+            FrameLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+        )
+        root.addView(
+            overlay,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+        formatOverlay = overlay
+        overlay.requestFocus()
+        animateFormatOverlayStatusBar(visible = true)
+        overlay.animate().alpha(1f).setDuration(FORMAT_OVERLAY_ANIM_MS).start()
+    }
+
+    private fun populateFormatChoices(container: LinearLayout) {
+        container.removeAllViews()
+        container.orientation = LinearLayout.VERTICAL
+        ChapterBackupFormat.values().forEachIndexed { index, format ->
+            if (index > 0) {
+                container.addView(
+                    separator(theme.divider),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1),
+                )
+            }
+            container.addView(
+                createFormatChoiceRow(format).apply {
+                    isClickable = true
+                    setOnClickListener {
+                        if (exportFormat != format) {
+                            exportFormat = format
+                            updateFormatText()
+                            populateFormatChoices(container)
+                        }
+                    }
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)),
+            )
+        }
+    }
+
+    private fun createFormatChoiceRow(format: ChapterBackupFormat): View {
+        val selected = format == exportFormat
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), 0, dp(18), 0)
+            setBackgroundColor(if (selected) colorWithAlpha(theme.titleRightText, 0.10f) else Color.TRANSPARENT)
             addView(
                 TextView(activity).apply {
-                    text = "导出格式"
-                    textSize = 17f
-                    typeface = Typeface.DEFAULT_BOLD
+                    text = if (selected) "●" else "○"
+                    textSize = 22f
                     gravity = Gravity.CENTER
-                    setTextColor(theme.titleText)
+                    setTextColor(if (selected) theme.titleRightText else theme.tertiaryText)
                     includeFontPadding = false
                 },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)),
+                LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.MATCH_PARENT),
             )
-            ChapterBackupFormat.values().forEachIndexed { index, format ->
-                if (index > 0) {
-                    addView(separator(theme.divider), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
-                }
-                addView(
-                    TextView(activity).apply {
-                        text = if (format == exportFormat) "${format.displayName}  ✓" else format.displayName
-                        textSize = 16f
-                        gravity = Gravity.CENTER
-                        setTextColor(if (format == exportFormat) theme.titleRightText else theme.primaryText)
-                        typeface = if (format == exportFormat) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                        includeFontPadding = false
-                        isClickable = true
-                        setOnClickListener {
-                            if (exportFormat != format) {
-                                exportFormat = format
-                                updateFormatText()
-                                Toast.makeText(activity, "已切换为 ${format.displayName}", Toast.LENGTH_SHORT).show()
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        TextView(activity).apply {
+                            text = format.displayName
+                            textSize = 16f
+                            typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                            setTextColor(if (selected) theme.titleRightText else theme.primaryText)
+                            includeFontPadding = false
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(26)),
+                    )
+                    addView(
+                        TextView(activity).apply {
+                            text = when (format) {
+                                ChapterBackupFormat.EPUB -> "保留目录层级与作品信息，适合阅读器导入"
+                                ChapterBackupFormat.TXT -> "通用纯文本格式，便于查看和编辑"
                             }
-                            formatDialog.dismiss()
-                        }
-                    },
-                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)),
-                )
-            }
+                            textSize = 12f
+                            setTextColor(theme.secondaryText)
+                            includeFontPadding = false
+                            maxLines = 1
+                            ellipsize = TextUtils.TruncateAt.END
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)),
+                    )
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f),
+            )
         }
-        formatDialog.setContentView(
-            FrameLayout(activity).apply {
-                addView(
-                    panel,
-                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-                )
-            },
-        )
-        formatDialog.setOnShowListener {
-            formatDialog.window?.apply {
-                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                setDimAmount(0.45f)
-                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                setLayout((activity.resources.displayMetrics.widthPixels * 0.58f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
-                applySystemBars(this)
+    }
+
+    private fun closeFormatOverlay(): Boolean {
+        val overlay = formatOverlay ?: return false
+        formatOverlay = null
+        animateFormatOverlayStatusBar(visible = false)
+        overlay.animate().cancel()
+        overlay.animate()
+            .alpha(0f)
+            .setDuration(FORMAT_OVERLAY_ANIM_MS)
+            .withEndAction {
+                (overlay.parent as? ViewGroup)?.removeView(overlay)
             }
+            .start()
+        return true
+    }
+
+    private fun animateFormatOverlayStatusBar(visible: Boolean) {
+        val window = dialog?.window ?: return
+        val normalColor = theme.titleBackground
+        val overlayColor = darkenColor(normalColor, FORMAT_OVERLAY_DIM_FRACTION)
+        val targetColor = if (visible) overlayColor else normalColor
+        formatSystemBarAnimator?.cancel()
+        formatSystemBarAnimator = ValueAnimator.ofArgb(window.statusBarColor, targetColor).apply {
+            duration = FORMAT_OVERLAY_ANIM_MS
+            addUpdateListener { animator ->
+                val color = animator.animatedValue as Int
+                window.statusBarColor = color
+                applyStatusBarIconAppearance(window, color)
+            }
+            start()
         }
-        formatDialog.show()
     }
 
     private fun updateFormatText() {
@@ -942,9 +1057,10 @@ internal class ChapterExportSelectionWindow(
         val currentDialog = dialog
         currentDialog?.setOnDismissListener(null)
         rootView?.removeCallbacks(themeRefreshRunnable)
+        formatSystemBarAnimator?.cancel()
+        formatSystemBarAnimator = null
         dialog = null
         rootView = null
-        pageView = null
         closing = false
         runCatching {
             if (currentDialog?.isShowing == true) {
@@ -1020,22 +1136,10 @@ internal class ChapterExportSelectionWindow(
             return
         }
         stopMovingContentForDismiss()
-        val page = pageView ?: root
-        val targetX = page.width
-            .takeIf { it > 0 }
-            ?: root.width.takeIf { it > 0 }
-            ?: activity.resources.displayMetrics.widthPixels
         closing = true
         root.animate().cancel()
-        page.animate().cancel()
-        page.animate()
-            .translationX(targetX.toFloat())
-            .setDuration(PAGE_ANIM_MS)
-            .setInterpolator(pageInterpolator)
-            .withEndAction {
-                currentDialog.dismiss()
-            }
-            .start()
+        root.clearAnimation()
+        currentDialog.dismiss()
     }
 
     private fun stopMovingContentForDismiss() {
@@ -1045,11 +1149,18 @@ internal class ChapterExportSelectionWindow(
         runCatching {
             val now = SystemClock.uptimeMillis()
             val cancelEvent = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
-            listView.dispatchTouchEvent(cancelEvent)
-            cancelEvent.recycle()
+            try {
+                listView.dispatchTouchEvent(cancelEvent)
+            } finally {
+                cancelEvent.recycle()
+            }
         }
-        listView.smoothScrollBy(0, 0)
+        val firstVisiblePosition = listView.firstVisiblePosition
+        val firstVisibleTop = listView.getChildAt(0)?.top ?: 0
+        listView.setSelectionFromTop(firstVisiblePosition, firstVisibleTop)
         listView.isEnabled = false
+        listView.isVerticalScrollBarEnabled = false
+        listView.setOnTouchListener { _, _ -> true }
         listView.animate().cancel()
         listView.clearAnimation()
         repeat(listView.childCount) { index ->
@@ -1060,29 +1171,19 @@ internal class ChapterExportSelectionWindow(
         }
     }
 
-    private fun playEnterAnimation(page: View) {
-        page.post {
-            page.translationX = page.width.coerceAtLeast(activity.resources.displayMetrics.widthPixels).toFloat()
-            page.animate().cancel()
-            page.animate()
-                .translationX(0f)
-                .setDuration(PAGE_ANIM_MS)
-                .setInterpolator(pageInterpolator)
-                .start()
-        }
-    }
-
     private fun refreshTheme(reason: String) {
         val currentDialog = dialog ?: return
         if (closing) {
             return
         }
+        formatOverlay = null
+        formatSystemBarAnimator?.cancel()
+        formatSystemBarAnimator = null
         val first = if (::listView.isInitialized) listView.firstVisiblePosition else 0
         theme = HostPageTheme.from(activity)
         currentDialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         currentDialog.window?.decorView?.setBackgroundColor(Color.TRANSPARENT)
         val root = createRoot()
-        pageView?.translationX = 0f
         rootView = root
         currentDialog.setContentView(root)
         currentDialog.window?.apply { configureWindow(this) }
@@ -1108,7 +1209,11 @@ internal class ChapterExportSelectionWindow(
             window.statusBarColor = theme.titleBackground
             window.navigationBarColor = theme.rowBackground
         }
-        val lightStatusBar = isLightColor(theme.titleBackground)
+        applyStatusBarIconAppearance(window, theme.titleBackground)
+    }
+
+    private fun applyStatusBarIconAppearance(window: Window, statusBarColor: Int) {
+        val lightStatusBar = isLightColor(statusBarColor)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val decor = window.decorView
             val lightStatusFlag = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
@@ -1493,6 +1598,24 @@ internal class ChapterExportSelectionWindow(
         }
     }
 
+    private fun colorWithAlpha(color: Int, fraction: Float): Int {
+        return Color.argb(
+            (255f * fraction.coerceIn(0f, 1f)).toInt(),
+            Color.red(color),
+            Color.green(color),
+            Color.blue(color),
+        )
+    }
+
+    private fun darkenColor(color: Int, fraction: Float): Int {
+        val remaining = 1f - fraction.coerceIn(0f, 1f)
+        return Color.rgb(
+            (Color.red(color) * remaining).toInt(),
+            (Color.green(color) * remaining).toInt(),
+            (Color.blue(color) * remaining).toInt(),
+        )
+    }
+
     private fun strokeRoundRect(fill: Int, stroke: Int, radius: Float, strokeDp: Int): GradientDrawable {
         return GradientDrawable().apply {
             setColor(fill)
@@ -1647,7 +1770,9 @@ internal class ChapterExportSelectionWindow(
     companion object {
         private const val CHUNK_SIZE = 10
         private const val TAG = "CWMHook.ChapterExport"
-        private const val PAGE_ANIM_MS = 320L
+        private const val MODULE_PACKAGE = "com.xiyunmn.cwmhook"
+        private const val FORMAT_OVERLAY_ANIM_MS = 140L
+        private const val FORMAT_OVERLAY_DIM_FRACTION = 0.45f
         private const val EXPAND_COLLAPSE_ANIM_MS = 120L
         private const val RESTORE_TTL_MS = 60_000L
         private const val NAMING_SELECTION_COLOR = 0x6633B5E5

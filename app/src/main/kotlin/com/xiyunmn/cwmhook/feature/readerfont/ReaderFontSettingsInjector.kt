@@ -123,7 +123,11 @@ internal class ReaderFontSettingsInjector(
         traverse(root) { view ->
             val tag = view.tag as? String ?: return@traverse
             if (tag.startsWith(customCheckTagPrefix)) {
-                view.visibility = if (tag.removePrefix(customCheckTagPrefix) == currentPath) View.VISIBLE else View.GONE
+                view.visibility = if (sameFontPath(tag.removePrefix(customCheckTagPrefix), currentPath)) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
+                }
             }
         }
     }
@@ -462,13 +466,13 @@ internal class ReaderFontSettingsInjector(
             background = rounded(palette.rowBackground, dp(activity, 10).toFloat())
         }
         content.addView(TextView(activity).apply {
-            text = "管理已添加字体"
+            text = "管理本地字体"
             textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(palette.titleText)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         content.addView(TextView(activity).apply {
-            text = "长按条目拖动排序，删除只会移除自定义字体"
+            text = "点击切换字体，长按拖动排序；删除仅移除本地副本"
             textSize = 12f
             setTextColor(palette.subText)
             setPadding(0, dp(activity, 4), 0, dp(activity, 10))
@@ -482,14 +486,23 @@ internal class ReaderFontSettingsInjector(
             list.removeAllViews()
             managedFontPaths(activity).forEach { path ->
                 list.addView(
-                    createManagerRow(activity, activityClass, path, palette) {
-                        deleteManagedFont(activity, activityClass, path)
-                        if (managedFontPaths(activity).isEmpty()) {
-                            popup.dismiss()
-                        } else {
+                    createManagerRow(
+                        activity = activity,
+                        path = path,
+                        palette = palette,
+                        onSelect = {
+                            selectCustomFont(activity, activityClass, path)
                             renderList()
-                        }
-                    },
+                        },
+                        onDelete = {
+                            deleteManagedFont(activity, activityClass, path)
+                            if (managedFontPaths(activity).isEmpty()) {
+                                popup.dismiss()
+                            } else {
+                                renderList()
+                            }
+                        },
+                    ),
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 64)).apply {
                         bottomMargin = dp(activity, 8)
                     },
@@ -538,19 +551,22 @@ internal class ReaderFontSettingsInjector(
 
     private fun createManagerRow(
         activity: Activity,
-        activityClass: Class<*>,
         path: String,
         palette: HostPalette,
+        onSelect: () -> Unit,
         onDelete: () -> Unit,
     ): View {
         val file = File(path)
-        val selected = File(typefaceProvider.currentTextTypePath(activity)).absolutePath == file.absolutePath
+        val selected = sameFontPath(typefaceProvider.currentTextTypePath(activity), path)
         val row = LinearLayout(activity).apply {
             tag = manageRowTagPrefix + path
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(activity, 10), 0, dp(activity, 8), 0)
-            background = rounded(palette.rowBackground, dp(activity, 8).toFloat())
+            background = rounded(
+                if (selected) blendColor(palette.rowBackground, palette.accent, 0.10f) else palette.rowBackground,
+                dp(activity, 8).toFloat(),
+            )
             isLongClickable = true
             setOnLongClickListener { view ->
                 view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -558,7 +574,8 @@ internal class ReaderFontSettingsInjector(
             }
             setOnClickListener {
                 if (file.isFile) {
-                    selectCustomFont(activity, activityClass, path)
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    onSelect()
                 }
             }
         }
@@ -582,15 +599,19 @@ internal class ReaderFontSettingsInjector(
             text = typefaceProvider.displayName(path)
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(palette.titleText)
+            setTextColor(if (selected) palette.accent else palette.titleText)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             typefaceProvider.load(path)?.let { typeface = it }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         texts.addView(TextView(activity).apply {
-            text = if (file.isFile) path else "文件不存在"
+            text = when {
+                !file.isFile -> "文件不存在"
+                selected -> "当前使用 · $path"
+                else -> path
+            }
             textSize = 11f
-            setTextColor(palette.subText)
+            setTextColor(if (selected) palette.accent else palette.subText)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.MIDDLE
             setPadding(0, dp(activity, 4), 0, 0)
@@ -600,7 +621,9 @@ internal class ReaderFontSettingsInjector(
             RelativeLayout(activity).apply {
                 if (selected) {
                     addView(
-                        ReaderFontIconView(activity, ReaderFontIconKind.RADIO_SELECTED, palette.accent),
+                        ReaderFontIconView(activity, ReaderFontIconKind.RADIO_SELECTED, palette.accent).apply {
+                            contentDescription = "当前使用"
+                        },
                         RelativeLayout.LayoutParams(dp(activity, 34), dp(activity, 34)).apply {
                             addRule(RelativeLayout.CENTER_IN_PARENT)
                         },
@@ -750,10 +773,10 @@ internal class ReaderFontSettingsInjector(
     }
 
     private fun deleteManagedFont(activity: Activity, activityClass: Class<*>, path: String) {
-        val remaining = ReaderFontConfigStore.readFonts(activity).filterNot { File(it).absolutePath == File(path).absolutePath }
+        val remaining = ReaderFontConfigStore.readFonts(activity).filterNot { sameFontPath(it, path) }
         ReaderFontConfigStore.writeFonts(activity, remaining)
         deletePrivateFontCopy(activity, path)
-        if (File(typefaceProvider.currentTextTypePath(activity)).absolutePath == File(path).absolutePath) {
+        if (sameFontPath(typefaceProvider.currentTextTypePath(activity), path)) {
             resetCurrentFont(activity, activityClass)
         }
         rebuildCustomRows(activity, activityClass)
@@ -794,7 +817,6 @@ internal class ReaderFontSettingsInjector(
     private fun selectCustomFont(activity: Activity, activityClass: Class<*>, path: String) {
         applyCustomFontSelection(activity, activityClass, path)
         updateCustomChecks(activity)
-        Toast.makeText(activity, "已选择 ${typefaceProvider.displayName(path)}", Toast.LENGTH_SHORT).show()
     }
 
     private fun applyCustomFontSelection(activity: Activity, activityClass: Class<*>, path: String) {
@@ -1027,6 +1049,27 @@ internal class ReaderFontSettingsInjector(
             setColor(color)
             cornerRadius = radius
         }
+    }
+
+    private fun blendColor(base: Int, overlay: Int, fraction: Float): Int {
+        val amount = fraction.coerceIn(0f, 1f)
+        val baseAmount = 1f - amount
+        return Color.rgb(
+            (Color.red(base) * baseAmount + Color.red(overlay) * amount).toInt(),
+            (Color.green(base) * baseAmount + Color.green(overlay) * amount).toInt(),
+            (Color.blue(base) * baseAmount + Color.blue(overlay) * amount).toInt(),
+        )
+    }
+
+    private fun sameFontPath(first: String, second: String): Boolean {
+        if (first.isBlank() || second.isBlank()) {
+            return first == second
+        }
+        fun normalized(path: String): String {
+            return runCatching { File(path).canonicalPath }
+                .getOrElse { File(path).absolutePath }
+        }
+        return normalized(first) == normalized(second)
     }
 
     private fun setPrivateString(target: Any, owner: Class<*>, fieldName: String, value: String) {
