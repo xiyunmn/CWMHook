@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.View
 import android.view.Window
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import java.util.Locale
 import java.util.WeakHashMap
 
@@ -236,6 +237,13 @@ internal class StatusBarRuntimeApplier(
         bookDetailHeroController.release(activity.window)
     }
 
+    fun prepareForHotReload(windows: List<Window>) {
+        synchronized(bookDetailCaptureGenerations) {
+            bookDetailCaptureGenerations.clear()
+        }
+        bookDetailHeroController.clearForHotReload(windows)
+    }
+
     private fun captureCurrentBookDetailHero(activity: android.app.Activity): Boolean {
         if (activity.isFinishing || (android.os.Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return false
         val heroViewId = activity.resources.getIdentifier(
@@ -263,15 +271,15 @@ internal class StatusBarRuntimeApplier(
             next
         }
         BOOK_DETAIL_CAPTURE_RETRY_MS.forEach { delayMs ->
-            window.decorView.postDelayed({
+            ModuleViewTaskRegistry.post(window.decorView, delayMs) capture@{
                 val current = synchronized(bookDetailCaptureGenerations) {
                     bookDetailCaptureGenerations[window]
                 }
-                if (current != generation) return@postDelayed
+                if (current != generation) return@capture
                 if (captureCurrentBookDetailHero(activity)) {
                     bookDetailHeroController.reapplyIfActive(window)
                 }
-            }, delayMs)
+            }
         }
     }
 

@@ -77,4 +77,8 @@ object ImmersiveStatusBarFeature {
     fun setTransientOverlayVisible(activity: Activity, visible: Boolean) {
         graph.setTransientOverlayVisible(activity, visible)
     }
+
+    fun prepareForHotReload(activities: List<Activity>) {
+        graph.prepareForHotReload(activities)
+    }
 }

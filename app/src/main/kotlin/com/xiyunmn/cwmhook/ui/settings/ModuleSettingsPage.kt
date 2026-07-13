@@ -31,10 +31,12 @@ import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupDestination
+import com.xiyunmn.cwmhook.host.CiweiMaoPaths
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabPanelState
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import com.xiyunmn.cwmhook.ui.common.dp
 import com.xiyunmn.cwmhook.ui.icons.IconType
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import java.io.File
 
 internal class ModuleSettingsPage(
@@ -373,7 +375,7 @@ internal class ModuleSettingsPage(
         addSectionTitle("调试")
         addOverviewRow(
             title = "启用详细文件日志",
-            subtitle = "写入 cwmhook/logs 文件日志，不影响 LSPosed 日志",
+            subtitle = "日志目录：${CiweiMaoPaths.MODULE_LOG_DIR}/",
             enabled = debugConfig.detailedFileLogEnabled,
             onToggle = {
                 debugConfig = debugConfig.copy(
@@ -391,7 +393,7 @@ internal class ModuleSettingsPage(
             icon = IconType.DELETE,
         ) {
             val cleared = ModuleFileLogger.clear(activity)
-            toast(if (cleared) "文件日志已清理" else "清理失败，请查看 LSPosed 日志")
+            toast(if (cleared) "文件日志已清理" else "文件日志清理失败，请稍后重试")
         }
     }
 
@@ -697,7 +699,7 @@ internal class ModuleSettingsPage(
             debugConfig,
         )
         onClose("save-restart")
-        activity.window.decorView.postDelayed({ onRestartHost() }, 250L)
+        ModuleViewTaskRegistry.post(activity.window.decorView, 250L) { onRestartHost() }
     }
 
     private fun confirmResetDrafts() {
@@ -775,27 +777,21 @@ internal class ModuleSettingsPage(
 
     private fun scheduleChapterBackupPathRefresh() {
         listOf(600L, 1500L, 3000L, 6000L, 12000L, 24000L).forEach { delay ->
-            overlay.postDelayed(
-                {
-                    if (syncChapterBackupPathFromStore()) {
-                        render(currentPage)
-                    }
-                },
-                delay,
-            )
+            ModuleViewTaskRegistry.post(overlay, delay) {
+                if (syncChapterBackupPathFromStore()) {
+                    render(currentPage)
+                }
+            }
         }
     }
 
     private fun scheduleReaderFontListRefresh() {
         listOf(800L, 1600L, 3200L, 6400L, 12000L).forEach { delay ->
-            overlay.postDelayed(
-                {
-                    if (currentPage == Page.ReaderFont || currentPage == Page.ReaderFontManager) {
-                        render(currentPage)
-                    }
-                },
-                delay,
-            )
+            ModuleViewTaskRegistry.post(overlay, delay) {
+                if (currentPage == Page.ReaderFont || currentPage == Page.ReaderFontManager) {
+                    render(currentPage)
+                }
+            }
         }
     }
 

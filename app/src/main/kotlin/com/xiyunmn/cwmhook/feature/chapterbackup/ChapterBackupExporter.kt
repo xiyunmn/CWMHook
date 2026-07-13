@@ -19,6 +19,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 internal class ChapterBackupExporter(
     private val classLoader: ClassLoader,
@@ -48,18 +49,20 @@ internal class ChapterBackupExporter(
         }
     }
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val activeOperations = AtomicInteger()
 
     fun exportCachedBooks(context: Context, callback: Callback) {
         val appContext = context.applicationContext ?: context
-        callback.onStarted()
+        val tracked = tracked(callback)
+        tracked.onStarted()
         executor.execute {
             val result = runCatching { exportCachedBooksOnWorker(appContext) }
             mainHandler.post {
                 result
-                    .onSuccess(callback::onSuccess)
+                    .onSuccess(tracked::onSuccess)
                     .onFailure { throwable ->
                         ModuleFileLogger.e(logTag, "Cached chapter export failed", throwable)
-                        callback.onFailure(throwable.message ?: "导出失败")
+                        tracked.onFailure(throwable.message ?: "导出失败")
                     }
             }
         }
@@ -75,15 +78,16 @@ internal class ChapterBackupExporter(
 
     fun loadBookCandidates(context: Context, book: ChapterBackupBook, callback: CandidateCallback) {
         val appContext = context.applicationContext ?: context
-        callback.onStarted()
+        val tracked = tracked(callback)
+        tracked.onStarted()
         executor.execute {
             val result = runCatching { loadBookCandidatesOnWorker(appContext, book) }
             mainHandler.post {
                 result
-                    .onSuccess { callback.onSuccess(book, it) }
+                    .onSuccess { tracked.onSuccess(book, it) }
                     .onFailure { throwable ->
                         ModuleFileLogger.e(logTag, "Load chapter export candidates failed: ${book.bookId}", throwable)
-                        callback.onFailure(throwable.message ?: "读取目录失败")
+                        tracked.onFailure(throwable.message ?: "读取目录失败")
                     }
             }
         }
@@ -102,15 +106,16 @@ internal class ChapterBackupExporter(
             callback.onFailure("请先选择章节")
             return
         }
-        callback.onStarted()
+        val tracked = tracked(callback)
+        tracked.onStarted()
         executor.execute {
             val result = runCatching { exportSelectedChaptersOnWorker(appContext, book, selected, naming, format) }
             mainHandler.post {
                 result
-                    .onSuccess(callback::onSuccess)
+                    .onSuccess(tracked::onSuccess)
                     .onFailure { throwable ->
                         ModuleFileLogger.e(logTag, "Selected chapter export failed: ${book.bookId}", throwable)
-                        callback.onFailure(throwable.message ?: "导出失败")
+                        tracked.onFailure(throwable.message ?: "导出失败")
                     }
             }
         }
@@ -136,10 +141,11 @@ internal class ChapterBackupExporter(
             callback.onFailure("包含 $blocked 章不可导出的章节，请重新选择")
             return
         }
-        callback.onStarted()
+        val tracked = tracked(callback)
+        tracked.onStarted()
         val pendingDownloadIds = currentPendingDownloadIds(appContext, book, distinct)
         if (pendingDownloadIds.isEmpty()) {
-            exportSelectedChaptersAfterDownload(appContext, book, distinct, naming, format, callback)
+            exportSelectedChaptersAfterDownload(appContext, book, distinct, naming, format, tracked)
             return
         }
         runHostDownloadPreflight(
@@ -153,11 +159,76 @@ internal class ChapterBackupExporter(
                     downloadType = downloadType,
                     naming = naming,
                     format = format,
-                    callback = callback,
+                    callback = tracked,
                 )
             },
-            onFailure = callback::onFailure,
+            onFailure = tracked::onFailure,
         )
+    }
+
+    fun shutdownIfIdle(): Boolean {
+        if (activeOperations.get() != 0) {
+            return false
+        }
+        mainHandler.removeCallbacksAndMessages(null)
+        executor.shutdownNow()
+        return true
+    }
+
+    fun isIdle(): Boolean = activeOperations.get() == 0
+
+    private fun tracked(callback: Callback): Callback {
+        activeOperations.incrementAndGet()
+        val finished = AtomicBoolean(false)
+        fun finish() {
+            if (finished.compareAndSet(false, true)) {
+                activeOperations.decrementAndGet()
+            }
+        }
+        return object : DownloadCallback {
+            override fun onStarted() = callback.onStarted()
+
+            override fun onDownloadStarted(chapterCount: Int) {
+                (callback as? DownloadCallback)?.onDownloadStarted(chapterCount)
+            }
+
+            override fun onDownloadProgress(progress: Int) {
+                (callback as? DownloadCallback)?.onDownloadProgress(progress)
+            }
+
+            override fun onSuccess(result: ChapterBackupResult) {
+                finish()
+                callback.onSuccess(result)
+            }
+
+            override fun onFailure(message: String) {
+                finish()
+                callback.onFailure(message)
+            }
+        }
+    }
+
+    private fun tracked(callback: CandidateCallback): CandidateCallback {
+        activeOperations.incrementAndGet()
+        val finished = AtomicBoolean(false)
+        fun finish() {
+            if (finished.compareAndSet(false, true)) {
+                activeOperations.decrementAndGet()
+            }
+        }
+        return object : CandidateCallback {
+            override fun onStarted() = callback.onStarted()
+
+            override fun onSuccess(book: ChapterBackupBook, candidates: List<ChapterBackupCandidate>) {
+                finish()
+                callback.onSuccess(book, candidates)
+            }
+
+            override fun onFailure(message: String) {
+                finish()
+                callback.onFailure(message)
+            }
+        }
     }
 
     private fun currentBlockedCount(
@@ -271,6 +342,7 @@ internal class ChapterBackupExporter(
         callback: Callback,
     ) {
         mainHandler.post {
+            var restoreHostListener: (() -> Unit)? = null
             runCatching {
                 val downThreadClass = Class.forName(CiweiMaoClasses.BUY_DOWN_THREAD, false, classLoader)
                 val instance = downThreadClass.getMethod("getIntance").invoke(null)
@@ -283,6 +355,7 @@ internal class ChapterBackupExporter(
                     runCatching { listenerField.set(instance, originalListener) }
                         .onFailure { ModuleFileLogger.w(logTag, "Failed to restore host download listener", it) }
                 }
+                restoreHostListener = ::restoreListener
 
                 fun finishDownload(reason: String) {
                     if (!completed.compareAndSet(false, true)) {
@@ -330,6 +403,7 @@ internal class ChapterBackupExporter(
                     DOWNLOAD_TIMEOUT_MS,
                 )
             }.onFailure { throwable ->
+                restoreHostListener?.invoke()
                 ModuleFileLogger.e(logTag, "Host chapter download failed to start: book=${book.bookId}", throwable)
                 callback.onFailure(throwable.message ?: "下载启动失败")
             }

@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import java.util.Locale
 
 internal class StatusBarRenderedSampleScheduler(
@@ -54,9 +55,8 @@ internal class StatusBarRenderedSampleScheduler(
         val sampleSkinKey = state.activeSkinKey
         val sampleGeneration = state.generation
         state.pendingSample = true
-        appRoot.post(
-            {
-                appRoot.post secondFrame@{
+        ModuleViewTaskRegistry.post(appRoot) {
+            ModuleViewTaskRegistry.post(appRoot) secondFrame@{
                     state.pendingSample = false
                     if (!canSampleWindow(window)) return@secondFrame
                     state.lastSampleAt = SystemClock.uptimeMillis()
@@ -83,9 +83,8 @@ internal class StatusBarRenderedSampleScheduler(
                             "skin=$sampleSkinKey scene=$sampleSceneKey generation=$sampleGeneration " +
                             "color=${formatColor(sampledColor)} previous=${formatColor(previous)}",
                     )
-                }
-            },
-        )
+            }
+        }
     }
 
     private fun formatColor(color: Int?): String {

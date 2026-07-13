@@ -5,6 +5,10 @@ object CiweiMaoPackages {
     const val DEFAULT_PREF = "com.kuangxiangciweimao.novel_preferences"
 }
 
+object CiweiMaoPaths {
+    const val MODULE_LOG_DIR = "/data/user/0/${CiweiMaoPackages.NOVEL}/files/cwmhook/logs"
+}
+
 object CiweiMaoClasses {
     const val STUB_APP = "com.stub.StubApp"
     const val APP = "com.kuangxiangciweimao.novel.App"

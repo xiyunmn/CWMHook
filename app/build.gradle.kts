@@ -2,34 +2,75 @@ plugins {
     id("com.android.application")
 }
 
+val majorVersion = 1
+val minorVersion = 0
+val patchVersion = 0
+
+val releaseVersionCode = majorVersion * 10000 + minorVersion * 100 + patchVersion
+val betaVersionCode = releaseVersionCode + 50
+val debugVersionCode = releaseVersionCode + 99
+val baseVersionName = "$majorVersion.$minorVersion.$patchVersion"
+
+fun versionNameForBuildType(buildType: String) = when (buildType) {
+    "debug" -> "$baseVersionName-debug"
+    "beta" -> "$baseVersionName-beta"
+    else -> baseVersionName
+}
+
+fun versionCodeForBuildType(buildType: String) = when (buildType) {
+    "debug" -> debugVersionCode
+    "beta" -> betaVersionCode
+    else -> releaseVersionCode
+}
+
+fun apkFileNameForBuildType(buildType: String) = when (buildType) {
+    "debug" -> "CWMHook-v${baseVersionName}-debug.apk"
+    "beta" -> "CWMHook-v${baseVersionName}-beta.apk"
+    else -> "CWMHook-v${baseVersionName}-release.apk"
+}
+
 android {
     namespace = "com.xiyunmn.cwmhook"
-    compileSdk = 36
-    ndkVersion = "27.2.12479018"
+    compileSdk = 37
+
+    val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE").orNull
+    val releaseStorePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+    val releaseSigningProvided = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+    val releaseSigningPartiallyProvided = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).any { !it.isNullOrBlank() }
+
+    if (releaseSigningProvided) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    } else if (releaseSigningPartiallyProvided) {
+        project.logger.warn(
+            "[CWMHook] Release signing properties are incomplete; beta/release builds will be unsigned."
+        )
+    }
 
     defaultConfig {
         applicationId = "com.xiyunmn.cwmhook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
-
-        ndk {
-            abiFilters += "arm64-v8a"
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = false
-        }
+        versionCode = releaseVersionCode
+        versionName = baseVersionName
     }
 
     compileOptions {
@@ -45,12 +86,32 @@ android {
 
     buildTypes {
         debug {
+            versionNameSuffix = "-debug"
             isDebuggable = true
             isMinifyEnabled = false
             isShrinkResources = false
         }
 
+        create("beta") {
+            versionNameSuffix = "-beta"
+            signingConfig = signingConfigs.findByName("release")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            matchingFallbacks += listOf("release")
+        }
+
         release {
+            signingConfig = signingConfigs.findByName("release")
+            if (signingConfig == null) {
+                project.logger.lifecycle(
+                    "[CWMHook] :app:release uses unsigned output (no release keystore configured)."
+                )
+            }
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
@@ -62,6 +123,58 @@ android {
     }
 }
 
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val buildType = variant.buildType ?: "release"
+            output.versionName.set(versionNameForBuildType(buildType))
+            output.versionCode.set(versionCodeForBuildType(buildType))
+        }
+    }
+}
+
+listOf("debug", "beta", "release").forEach { buildType ->
+    val capitalizedBuildType = buildType.replaceFirstChar { it.uppercase() }
+    val apkFileName = apkFileNameForBuildType(buildType)
+    val apkDirProvider = layout.buildDirectory.dir("outputs/apk/$buildType")
+    val renameTask = tasks.register("rename${capitalizedBuildType}Apk") {
+        inputs.dir(apkDirProvider)
+        outputs.file(apkDirProvider.map { it.file(apkFileName) })
+
+        doLast {
+            val apkDir = apkDirProvider.get().asFile
+            if (!apkDir.isDirectory) return@doLast
+
+            val target = apkDir.resolve(apkFileName)
+            val sourceApks = apkDir.listFiles { file ->
+                file.isFile && file.extension == "apk" && file.name != apkFileName
+            }.orEmpty()
+            if (sourceApks.isEmpty()) return@doLast
+            if (sourceApks.size > 1) {
+                throw GradleException(
+                    "Expected one APK in ${apkDir.path}, found: ${sourceApks.joinToString { it.name }}"
+                )
+            }
+
+            val sourceApk = sourceApks.single()
+            sourceApk.copyTo(target, overwrite = true)
+            sourceApk.delete()
+
+            val metadataFile = apkDir.resolve("output-metadata.json")
+            if (metadataFile.isFile) {
+                metadataFile.writeText(
+                    metadataFile.readText().replace(sourceApk.name, target.name)
+                )
+            }
+        }
+    }
+
+    tasks.matching { it.name == "assemble$capitalizedBuildType" }.configureEach {
+        finalizedBy(renameTask)
+    }
+}
+
 dependencies {
-    compileOnly("io.github.libxposed:api:101.0.0")
+    compileOnly("io.github.libxposed:api:102.0.0")
+    lintChecks("io.github.libxposed:lint:1.0.0")
 }

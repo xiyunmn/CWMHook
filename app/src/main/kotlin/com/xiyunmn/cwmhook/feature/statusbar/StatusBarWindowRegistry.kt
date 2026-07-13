@@ -105,4 +105,14 @@ internal class StatusBarWindowRegistry(
         }
         return null
     }
+
+    fun clearForHotReload() {
+        synchronized(windowActivities) {
+            windowActivities.clear()
+        }
+        synchronized(windowStates) {
+            foregroundWindow = null
+            windowStates.clear()
+        }
+    }
 }

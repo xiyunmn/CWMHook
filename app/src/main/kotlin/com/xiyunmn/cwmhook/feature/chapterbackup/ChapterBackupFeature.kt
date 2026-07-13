@@ -20,6 +20,10 @@ object ChapterBackupFeature {
         hookInstaller.retryDeferredHooks(module, classLoader, reason)
     }
 
+    fun prepareForHotReload(): Boolean = hookInstaller.prepareForHotReload()
+
+    fun canHotReload(): Boolean = hookInstaller.canHotReload()
+
     fun launchDirectoryPicker(activity: Activity) {
         ChapterBackupDirectoryPicker.launch(activity, TAG)
     }

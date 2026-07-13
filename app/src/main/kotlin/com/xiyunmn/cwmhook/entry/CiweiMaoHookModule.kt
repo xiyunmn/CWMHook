@@ -7,14 +7,16 @@ import android.os.Bundle
 import android.util.Log
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
-import com.xiyunmn.cwmhook.feature.startupprobe.NativeStartupProbeLoader
 import com.xiyunmn.cwmhook.feature.startupprobe.StartupNetworkTaskProbe
 import com.xiyunmn.cwmhook.feature.startupprobe.StartupTimelineProbe
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import com.xiyunmn.cwmhook.plan.CiweiMaoHookPlanner
 import com.xiyunmn.cwmhook.plan.HookInstaller
+import com.xiyunmn.cwmhook.runtime.HotReloadCoordinator
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
@@ -28,6 +30,7 @@ class CiweiMaoHookModule : XposedModule() {
         processName = param.processName
         StartupTimelineProbe.mark("moduleLoaded", processName)
         log(Log.INFO, TAG, "Module loaded in process $processName")
+        log(Log.INFO, TAG, "Framework $frameworkName $frameworkVersionCode, API $apiVersion")
         ModuleFileLogger.i(TAG, "Module loaded in process $processName")
     }
 
@@ -48,9 +51,54 @@ class CiweiMaoHookModule : XposedModule() {
                 "process=$processName, classLoader=${param.classLoader}"
         )
         StartupTimelineProbe.mark("packageReady", processName)
-        NativeStartupProbeLoader.load()
         installStartupProbe(param.classLoader)
         HookInstaller.install(CiweiMaoHookPlanner.packageReadyPlan(this, processName), param.classLoader)
+    }
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        val state = HotReloadCoordinator.prepare(processName) ?: return false
+        state.putBundle("requestExtras", param.extras)
+        param.setSavedInstanceState(state)
+        return true
+    }
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        XposedCompat.attach(this)
+        val state = param.savedInstanceState as? Bundle
+        processName = state?.getString("processName").orEmpty().ifBlank { param.processName }
+        val application = com.xiyunmn.cwmhook.core.runtime.HostProcessInspector.currentApplication()
+        if (application != null) {
+            ModuleFileLogger.init(application, processName)
+            StartupTimelineProbe.configure(application, "hotReloaded")
+            StartupNetworkTaskProbe.configure(application)
+        }
+        val classLoader = HotReloadCoordinator.resolveHostClassLoader()
+        if (classLoader == null) {
+            param.oldHookHandles.forEach { runCatching { it.unhook() } }
+            log(Log.ERROR, TAG, "Hot reload failed to resolve host classloader")
+            ModuleFileLogger.e(TAG, "Hot reload failed to resolve host classloader")
+            return
+        }
+        applicationReadyRetried = true
+        XposedCompat.beginHookReplacement(param.oldHookHandles)
+        try {
+            installStartupProbe(classLoader)
+            HookInstaller.install(CiweiMaoHookPlanner.packageReadyPlan(this, processName), classLoader)
+            HookInstaller.install(
+                CiweiMaoHookPlanner.applicationReadyRetryPlan(
+                    module = this,
+                    processName = processName,
+                    reason = "hotReloaded",
+                ),
+                classLoader,
+            )
+        } finally {
+            XposedCompat.finishHookReplacement(param.oldHookHandles)
+        }
+        val replacedCount = param.oldHookHandles.count { runCatching { it.id != null }.getOrDefault(false) }
+        log(Log.INFO, TAG, "Hot reload completed in $processName, oldHooks=${param.oldHookHandles.size}, identified=$replacedCount")
+        ModuleFileLogger.i(TAG, "Hot reload completed: process=$processName oldHooks=${param.oldHookHandles.size}")
+        HotReloadCoordinator.recreateForegroundActivity("module hot reloaded")
     }
 
     private fun installStartupProbe(classLoader: ClassLoader) {

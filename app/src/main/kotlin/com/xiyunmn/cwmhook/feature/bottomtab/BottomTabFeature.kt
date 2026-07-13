@@ -4,6 +4,7 @@ import android.app.Activity
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfig
 import com.xiyunmn.cwmhook.config.bottomtab.BottomTabConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import io.github.libxposed.api.XposedModule
 
 object BottomTabFeature {
@@ -23,7 +24,7 @@ object BottomTabFeature {
             return
         }
         BottomTabRuntimeApplier.clear(activity)
-        activity.window.decorView.post {
+        ModuleViewTaskRegistry.post(activity.window.decorView) {
             BottomTabRuntimeApplier.apply(activity, config, reason)
         }
     }

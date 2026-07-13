@@ -2,6 +2,7 @@ package com.xiyunmn.cwmhook.feature.statusbar
 
 import android.widget.RadioGroup
 import com.xiyunmn.cwmhook.core.XposedCompat
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
 
@@ -22,7 +23,7 @@ internal class StatusBarMainTabHookInstaller(
             if (runCatching { group.resources.getResourceEntryName(group.id) }.getOrNull() != "tab") return@hookAfter
             val state = windowRegistry.state(activity.window)
             state.bumpGeneration("mainTab.check")
-            group.post { applyWindow(activity.window, "MainTab.check", false, null) }
+            ModuleViewTaskRegistry.post(group) { applyWindow(activity.window, "MainTab.check", false, null) }
         }
     }
 }

@@ -1,3 +1,5 @@
-# Keep the libxposed entry point referenced from META-INF/xposed/java_init.list.
--keep class com.xiyunmn.cwmhook.CiweiMaoHookModule { *; }
--keep class * extends io.github.libxposed.api.XposedModule { *; }
+-dontwarn io.github.libxposed.annotation.**
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}

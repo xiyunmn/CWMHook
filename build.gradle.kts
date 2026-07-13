@@ -7,6 +7,91 @@ tasks.register("verifyArchitecture") {
     description = "Checks CWMHook architecture boundaries and banned APIs."
 
     doLast {
+        fun verifyForbiddenTrackedFiles() {
+            if (!file(".git").exists()) {
+                return
+            }
+
+            val process = ProcessBuilder(
+                "git",
+                "-C",
+                projectDir.absolutePath,
+                "ls-files",
+                "-z",
+            ).redirectErrorStream(true).start()
+            val output = process.inputStream.readBytes()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw org.gradle.api.GradleException(
+                    "Cannot verify forbidden tracked files because git ls-files failed with exit code $exitCode.",
+                )
+            }
+
+            val forbiddenPrefixes = listOf(
+                ".claude/",
+                ".gradle/",
+                ".idea/",
+                ".kotlin/",
+                "app/.cxx/",
+                "app/release/",
+                "build/",
+                "io/",
+                "key/",
+                "local_docs/",
+                "log/",
+                "target_app/",
+                "tmp_jadx_async/",
+                "tools/",
+            )
+            val forbiddenExtensions = setOf(
+                "aab",
+                "apk",
+                "apks",
+                "db",
+                "dex",
+                "har",
+                "hprof",
+                "jks",
+                "key",
+                "keystore",
+                "log",
+                "p12",
+                "pcap",
+                "pem",
+                "pfx",
+                "prof",
+                "rar",
+                "so",
+                "sqlite",
+                "zip",
+                "7z",
+            )
+            val forbidden = output.toString(Charsets.UTF_8)
+                .split('\u0000')
+                .filter { it.isNotEmpty() }
+                .filter { path ->
+                    val normalized = path.replace('\\', '/').lowercase()
+                    val fileName = normalized.substringAfterLast('/')
+                    val extension = fileName.substringAfterLast('.', missingDelimiterValue = "")
+                    normalized == "local.properties" ||
+                        normalized == "build.log" ||
+                        (fileName.startsWith(".env") && fileName != ".env.example") ||
+                        forbiddenPrefixes.any(normalized::startsWith) ||
+                        "/build/" in normalized ||
+                        extension in forbiddenExtensions
+                }
+
+            if (forbidden.isNotEmpty()) {
+                throw org.gradle.api.GradleException(
+                    "Local, generated, reverse-engineering, or sensitive files must never be tracked. " +
+                        "Do not bypass .gitignore with git add -f. Remove them from the index with " +
+                        "git rm --cached while keeping the local files:" +
+                        System.lineSeparator() +
+                        forbidden.joinToString(System.lineSeparator()),
+                )
+            }
+        }
+
         fun sourceFilesUnder(root: java.io.File): Sequence<java.io.File> {
             if (!root.exists()) {
                 return emptySequence()
@@ -56,6 +141,8 @@ tasks.register("verifyArchitecture") {
             return parts.joinToString("")
         }
 
+        verifyForbiddenTrackedFiles()
+
         val appSourceFiles = sourceFilesUnder(file("app/src"))
         val buildConfigFiles = sequenceOf(file("app/build.gradle.kts"), file("settings.gradle.kts"))
             .filter { it.exists() }
@@ -91,14 +178,16 @@ tasks.register("verifyArchitecture") {
             ),
         )
         scan(
-            title = "libxposed-service and remote preferences are not used by this module.",
+            title = "The standalone module console and libxposed service are not allowed.",
             files = appAndBuildFiles,
             pattern = Regex(
                 listOf(
-                    pieces("io\\.github\\.libxposed", ":service"),
-                    pieces("io\\.github\\.libxposed\\.ser", "vice"),
+                    pieces("""io\.github\.libxposed""", ":service"),
+                    pieces("""io\.github\.libxposed\.ser""", "vice"),
                     pieces("Xposed", "Service"),
-                    pieces("getRemote", "Preferences"),
+                    pieces("ModuleControl", "Activity"),
+                    pieces("CwmHook", "Application"),
+                    pieces("""android\.intent\.category\.LAUN""", "CHER"),
                 ).joinToString("|"),
             ),
         )
@@ -168,13 +257,25 @@ tasks.register("verifyArchitecture") {
 
         val nativeInit = file("app/src/main/resources/META-INF/xposed/native_init.list")
         if (nativeInit.exists()) {
-            val nativeInitEntries = nativeInit.readLines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("#") }
-            val expectedNativeEntry = "libcwmhook_startup_probe.so"
-            if (nativeInitEntries != listOf(expectedNativeEntry)) {
+            throw org.gradle.api.GradleException(
+                "API 102 hot reload requires this module to stay Java-only; native_init.list is not allowed.",
+            )
+        }
+
+        val moduleProp = file("app/src/main/resources/META-INF/xposed/module.prop")
+        val moduleProperties = java.util.Properties().apply {
+            moduleProp.inputStream().use(::load)
+        }
+        val requiredProps = mapOf(
+            "minApiVersion" to "102",
+            "targetApiVersion" to "102",
+            "autoHotReload" to "true",
+        )
+        requiredProps.forEach { (key, expected) ->
+            val actual = moduleProperties.getProperty(key)
+            if (actual != expected) {
                 throw org.gradle.api.GradleException(
-                    "libxposed native_init.list must point to $expectedNativeEntry, found: $nativeInitEntries",
+                    "module.prop requires $key=$expected for API 102 hot reload, found: $actual",
                 )
             }
         }

@@ -3,8 +3,9 @@ package com.xiyunmn.cwmhook.feature.statusbar
 import android.app.Activity
 import android.view.View
 import android.view.Window
-import java.lang.reflect.Method
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
+import java.lang.reflect.Method
 
 internal class StatusBarFeatureScheduler(
     private val mainFrameActivity: String,
@@ -36,8 +37,8 @@ internal class StatusBarFeatureScheduler(
             val decorView = window.decorView
             val state = windowRegistry.state(window)
             state.bumpGeneration(reason)
-            decorView.post {
-                decorView.post {
+            ModuleViewTaskRegistry.post(decorView) {
+                ModuleViewTaskRegistry.post(decorView) {
                     runtimeApplier.apply(window, reason, forceSample = true)
                 }
             }
@@ -84,7 +85,7 @@ internal class StatusBarFeatureScheduler(
             return
         }
         state.pendingApply = true
-        decorView.post {
+        ModuleViewTaskRegistry.post(decorView) {
             val nextSceneKey = state.pendingSceneKey ?: sceneKey
             state.pendingSceneKey = null
             state.pendingApply = false

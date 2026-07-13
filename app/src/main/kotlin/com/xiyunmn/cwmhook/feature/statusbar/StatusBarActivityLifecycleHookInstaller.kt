@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.content.res.Configuration
 import android.view.Window
 import com.xiyunmn.cwmhook.core.XposedCompat
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import io.github.libxposed.api.XposedModule
 
 internal class StatusBarActivityLifecycleHookInstaller(
@@ -36,8 +37,8 @@ internal class StatusBarActivityLifecycleHookInstaller(
             val state = windowRegistry.state(activity.window)
             state.markDirty(clearCached = false)
             val decor = activity.window.decorView
-            decor.post {
-                decor.post {
+            ModuleViewTaskRegistry.post(decor) {
+                ModuleViewTaskRegistry.post(decor) {
                     applyWindow(activity.window, "Activity.onConfigurationChanged", true, null)
                 }
             }
@@ -74,7 +75,7 @@ internal class StatusBarActivityLifecycleHookInstaller(
                 if (isReaderActivity(it.javaClass.name)) return@let
                 windowRegistry.rememberActivityWindow(it)
                 windowRegistry.setForegroundWindow(it.window)
-                it.window.decorView.post {
+                ModuleViewTaskRegistry.post(it.window.decorView) {
                     applyWindow(it.window, "Activity.onPostResume", false, null)
                 }
             }
@@ -109,8 +110,8 @@ internal class StatusBarActivityLifecycleHookInstaller(
             if (hasFocus) {
                 windowRegistry.setForegroundWindow(activity.window)
                 val decor = activity.window.decorView
-                decor.post {
-                    decor.post {
+                ModuleViewTaskRegistry.post(decor) {
+                    ModuleViewTaskRegistry.post(decor) {
                         applyWindow(activity.window, "Activity.onWindowFocusChanged", false, null)
                     }
                 }

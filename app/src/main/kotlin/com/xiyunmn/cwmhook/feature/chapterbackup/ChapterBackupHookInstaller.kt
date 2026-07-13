@@ -19,6 +19,7 @@ import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
 import com.xiyunmn.cwmhook.core.hostui.HostSkinPalette
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
 import kotlin.math.min
@@ -52,6 +53,19 @@ internal class ChapterBackupHookInstaller(
     fun exportCachedBooks(activity: Activity, callback: ChapterBackupExporter.Callback) {
         exporter?.exportCachedBooks(activity, callback) ?: callback.onFailure("章节备份尚未初始化")
     }
+
+    fun prepareForHotReload(): Boolean {
+        val idle = exporter?.shutdownIfIdle() ?: true
+        if (!idle) {
+            ModuleFileLogger.w(logTag, "Hot reload rejected because chapter export/download is active")
+            return false
+        }
+        exporter = null
+        ChapterExportSelectionWindow.detachAllForHotReload()
+        return true
+    }
+
+    fun canHotReload(): Boolean = exporter?.isIdle() != false
 
     private fun hookCatalogFragment(module: XposedModule, classLoader: ClassLoader) {
         if (catalogHookInstalled) {
@@ -299,10 +313,9 @@ internal class ChapterBackupHookInstaller(
             return
         }
         val currentExporter = exporter ?: return
-        window.decorView.postDelayed(
-            {
+        ModuleViewTaskRegistry.post(window.decorView, delayMs) {
                 if (!isFinishing && !isDestroyedCompat()) {
-                    val bookInfo = catalogActivityBookInfo() ?: return@postDelayed
+                    val bookInfo = catalogActivityBookInfo() ?: return@post
                     ChapterExportSelectionWindow.restoreIfNeeded(
                         this,
                         currentExporter,
@@ -311,9 +324,7 @@ internal class ChapterBackupHookInstaller(
                         reason,
                     )
                 }
-            },
-            delayMs,
-        )
+            }
     }
 
     private fun hookSkinChange(module: XposedModule, classLoader: ClassLoader) {

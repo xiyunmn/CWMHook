@@ -106,6 +106,15 @@ internal class StatusBarScrimController(
         return if (Color.alpha(color) >= 230) color else null
     }
 
+    fun clearForHotReload() {
+        val scrims = (baseColors.keys + overlayFractions.keys).distinct()
+        scrims.forEach { scrim ->
+            runCatching { (scrim.parent as? ViewGroup)?.removeView(scrim) }
+        }
+        baseColors.clear()
+        overlayFractions.clear()
+    }
+
     private fun darken(color: Int, fraction: Float): Int {
         if (fraction <= 0f) return color
         val factor = 1f - fraction.coerceIn(0f, 1f)

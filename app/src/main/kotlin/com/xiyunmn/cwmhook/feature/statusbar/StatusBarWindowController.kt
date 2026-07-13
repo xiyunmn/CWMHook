@@ -11,6 +11,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsAnimation
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import java.util.WeakHashMap
 
 internal class StatusBarWindowController {
@@ -109,7 +110,9 @@ internal class StatusBarWindowController {
         val generation = (readerOverlayGenerations[window] ?: 0) + 1
         readerOverlayGenerations[window] = generation
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            decorView.postDelayed({ removeReaderStatusBarOverlay(window, decorView, generation) }, 350L)
+            ModuleViewTaskRegistry.post(decorView, 350L) {
+                removeReaderStatusBarOverlay(window, decorView, generation)
+            }
             return
         }
         val fullHeight = readerStatusBarOverlayHeight(decorView)
@@ -135,10 +138,25 @@ internal class StatusBarWindowController {
             }
         }
         decorView.setWindowInsetsAnimationCallback(callback)
-        decorView.postDelayed({
+        ModuleViewTaskRegistry.post(decorView, READER_OVERLAY_CLEAR_FALLBACK_MS) {
             decorView.setWindowInsetsAnimationCallback(null)
             removeReaderStatusBarOverlay(window, decorView, generation)
-        }, READER_OVERLAY_CLEAR_FALLBACK_MS)
+        }
+    }
+
+    fun prepareForHotReload(windows: List<Window>) {
+        val trackedWindows = (windows + readerStatusBarOverlays.keys + readerOverlayGenerations.keys).distinct()
+        trackedWindows.forEach { window ->
+            runCatching {
+                val decorView = window.decorView
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    decorView.setWindowInsetsAnimationCallback(null)
+                }
+                readerStatusBarOverlays.remove(window)?.let(decorView.overlay::remove)
+            }
+        }
+        readerStatusBarOverlays.clear()
+        readerOverlayGenerations.clear()
     }
 
     private fun removeReaderStatusBarOverlay(window: Window, decorView: View, generation: Int) {

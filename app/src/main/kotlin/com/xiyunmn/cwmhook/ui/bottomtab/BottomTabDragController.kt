@@ -4,6 +4,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.LinearLayout
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.ui.common.dp
 import kotlin.math.abs
 
@@ -30,22 +31,27 @@ class BottomTabDragController(
             if (dragging) {
                 autoScroller.scrollIfNeeded()
                 scrollHandler.postDelayed(this, 50L)
+            } else {
+                ModuleViewTaskRegistry.untrack(this)
             }
         }
     }
-    private val longPressRunnable = Runnable {
-        if (!dragging && !longPressTriggered) {
-            longPressTriggered = true
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                row.performHapticFeedback(
-                    android.view.HapticFeedbackConstants.GESTURE_START,
-                    android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
-                )
-            } else {
-                row.performHapticFeedback(
-                    android.view.HapticFeedbackConstants.LONG_PRESS,
-                    android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
-                )
+    private val longPressRunnable = object : Runnable {
+        override fun run() {
+            ModuleViewTaskRegistry.untrack(this)
+            if (!dragging && !longPressTriggered) {
+                longPressTriggered = true
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    row.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.GESTURE_START,
+                        android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+                    )
+                } else {
+                    row.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.LONG_PRESS,
+                        android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+                    )
+                }
             }
         }
     }
@@ -61,6 +67,7 @@ class BottomTabDragController(
                 targetIndex = startIndex
                 lastTargetIndex = startIndex
                 rowSlotHeight = row.bottomTabRowSlotHeight()
+                ModuleViewTaskRegistry.track(scrollHandler, longPressRunnable)
                 scrollHandler.postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
@@ -80,11 +87,13 @@ class BottomTabDragController(
                         .alpha(0.96f)
                         .setDuration(90L)
                         .start()
+                    ModuleViewTaskRegistry.track(scrollHandler, autoScrollRunnable)
                     scrollHandler.post(autoScrollRunnable)
                 }
 
                 if (!longPressTriggered && dy > touchSlop) {
                     scrollHandler.removeCallbacks(longPressRunnable)
+                    ModuleViewTaskRegistry.untrack(longPressRunnable)
                 }
 
                 if (dragging) {
@@ -115,10 +124,12 @@ class BottomTabDragController(
             MotionEvent.ACTION_CANCEL,
             -> {
                 scrollHandler.removeCallbacks(longPressRunnable)
+                ModuleViewTaskRegistry.untrack(longPressRunnable)
                 if (!dragging) {
                     return false
                 }
                 scrollHandler.removeCallbacks(autoScrollRunnable)
+                ModuleViewTaskRegistry.untrack(autoScrollRunnable)
                 view.parent?.requestDisallowInterceptTouchEvent(false)
                 container.parent?.requestDisallowInterceptTouchEvent(false)
                 val shouldMove = event.actionMasked == MotionEvent.ACTION_UP &&

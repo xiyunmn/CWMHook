@@ -25,6 +25,7 @@ import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
@@ -64,6 +65,15 @@ object ModuleSettingsFeature {
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
         hookInstaller.retryDeferredHooks(module, classLoader, reason)
+    }
+
+    fun prepareForHotReload() {
+        ModuleSettingsPageWindow.detachAll("hot reload")
+        attachedEntries.keys.toList().forEach { anchor ->
+            anchor.setOnLongClickListener(null)
+            anchor.isLongClickable = false
+        }
+        attachedEntries.clear()
     }
 
     private fun attachBookShelfLongPressEntry(fragment: Any) {
@@ -271,12 +281,9 @@ object ModuleSettingsFeature {
         ModuleFileLogger.i(TAG, "Restart host requested from module settings")
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         activity.startActivity(launchIntent)
-        activity.window.decorView.postDelayed(
-            {
-                Process.killProcess(Process.myPid())
-            },
-            180L,
-        )
+        ModuleViewTaskRegistry.post(activity.window.decorView, 180L) {
+            Process.killProcess(Process.myPid())
+        }
     }
 
     private fun logSettingsClosed(reason: String) {

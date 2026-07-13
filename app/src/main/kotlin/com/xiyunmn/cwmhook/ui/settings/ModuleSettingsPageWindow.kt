@@ -12,6 +12,7 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.FrameLayout
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import java.util.WeakHashMap
 
@@ -100,7 +101,7 @@ object ModuleSettingsPageWindow {
         val holders = activeWindows.values.toList()
         holders.forEach { holder ->
             if (holder.dialog.isShowing) {
-                holder.overlay.post {
+                ModuleViewTaskRegistry.post(holder.overlay) {
                     if (activeWindows[holder.activity] === holder && holder.dialog.isShowing) {
                         refreshHolder(holder, reason)
                     }
@@ -153,8 +154,7 @@ object ModuleSettingsPageWindow {
             return false
         }
         pendingRestore = null
-        activity.window.decorView.postDelayed(
-            {
+        ModuleViewTaskRegistry.post(activity.window.decorView, 80L) {
                 if (!activity.isFinishing && !activity.isDestroyedCompat()) {
                     show(
                         activity = activity,
@@ -166,9 +166,7 @@ object ModuleSettingsPageWindow {
                     )
                     ModuleFileLogger.i(TAG, "Module settings page restored: reason=$reason activity=${activity.javaClass.name}")
                 }
-            },
-            80L,
-        )
+            }
         return true
     }
 
@@ -185,6 +183,16 @@ object ModuleSettingsPageWindow {
         holder.onClosed = onClosed
         close(holder.overlay, reason, onClosed)
         return true
+    }
+
+    fun detachAll(reason: String) {
+        val holders = activeWindows.values.toList()
+        activeWindows.clear()
+        pendingRestore = null
+        holders.forEach { holder ->
+            holder.closeReason = reason
+            holder.detach()
+        }
     }
 
     fun close(overlay: View, reason: String, onClosed: (String) -> Unit) {

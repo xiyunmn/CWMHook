@@ -40,4 +40,12 @@ internal class StatusBarPaddingController {
             view.setPadding(state.left, state.top, state.right, state.bottom)
         }
     }
+
+    fun restoreAllForHotReload() {
+        val views = synchronized(paddingStates) { paddingStates.keys.toList() }
+        views.forEach { view -> runCatching { restoreTopPadding(view) } }
+        synchronized(paddingStates) {
+            paddingStates.clear()
+        }
+    }
 }

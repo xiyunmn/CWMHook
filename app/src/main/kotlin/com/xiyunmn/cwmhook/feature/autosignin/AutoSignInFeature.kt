@@ -2,6 +2,7 @@ package com.xiyunmn.cwmhook.feature.autosignin
 
 import android.app.Activity
 import android.widget.Toast
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import io.github.libxposed.api.XposedModule
 
@@ -23,6 +24,18 @@ object AutoSignInFeature {
         hookInstaller.install(module)
         ModuleFileLogger.i(TAG, "Auto sign-in retry checked: $reason")
     }
+
+    fun prepareForHotReload(): Boolean {
+        val current = executor ?: return true
+        if (!current.shutdownIfIdle()) {
+            ModuleFileLogger.w(TAG, "Hot reload rejected because auto sign-in is active")
+            return false
+        }
+        executor = null
+        return true
+    }
+
+    fun canHotReload(): Boolean = executor?.isIdle() != false
 
     fun triggerManual(activity: Activity) {
         val currentExecutor = executor
@@ -55,13 +68,10 @@ object AutoSignInFeature {
             )
             return
         }
-        activity.window.decorView.postDelayed(
-            {
-                if (!activity.isFinishing) {
-                    currentExecutor.tryAuto(activity, reason)
-                }
-            },
-            AUTO_DELAY_MS,
-        )
+        ModuleViewTaskRegistry.post(activity.window.decorView, AUTO_DELAY_MS) {
+            if (!activity.isFinishing) {
+                currentExecutor.tryAuto(activity, reason)
+            }
+        }
     }
 }

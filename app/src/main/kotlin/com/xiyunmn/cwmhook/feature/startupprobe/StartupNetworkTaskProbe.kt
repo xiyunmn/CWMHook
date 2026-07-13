@@ -30,7 +30,8 @@ object StartupNetworkTaskProbe {
     private val taskLines = AtomicInteger()
     private val netLines = AtomicInteger()
     private val delayedTaskStartMs = Collections.synchronizedMap(WeakHashMap<Any, Long>())
-    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+    private val mainHandlerDelegate = lazy { Handler(Looper.getMainLooper()) }
+    private val mainHandler by mainHandlerDelegate
 
     @Volatile
     private var baseElapsedMs = 0L
@@ -67,6 +68,14 @@ object StartupNetworkTaskProbe {
         }
         installBaseTaskProbe(module, classLoader)
         installNetUtilsProbe(module, classLoader)
+    }
+
+    fun prepareForHotReload() {
+        if (mainHandlerDelegate.isInitialized()) {
+            mainHandler.removeCallbacksAndMessages(null)
+        }
+        delayedTaskStartMs.clear()
+        taskContextField = null
     }
 
     private fun installBaseTaskProbe(module: XposedModule, classLoader: ClassLoader) {

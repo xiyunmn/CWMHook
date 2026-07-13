@@ -6,6 +6,7 @@ import android.view.View
 import android.view.Window
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
 import java.util.WeakHashMap
@@ -72,7 +73,7 @@ internal class StatusBarReaderMenuHookInstaller(
             val titleBar = reflectedView(activity, "titleBar") ?: return@interceptProtective result
             if (titleBar.visibility != View.VISIBLE) return@interceptProtective result
             applyHostTitleColor(activity, titleBar, "ReaderActivity.showTop")
-            activity.window.decorView.postOnAnimation {
+            ModuleViewTaskRegistry.postOnAnimation(activity.window.decorView) {
                 if (titleBar.visibility == View.VISIBLE) {
                     applyHostTitleColor(activity, titleBar, "ReaderActivity.showTop.nextFrame")
                 }

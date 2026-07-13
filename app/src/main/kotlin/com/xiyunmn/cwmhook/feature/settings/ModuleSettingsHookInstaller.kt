@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -82,7 +83,7 @@ internal class ModuleSettingsHookInstaller(
         }
         val resumeHooked = hookAfter(module, Activity::class.java.getDeclaredMethod("onPostResume")) { chain ->
             val activity = chain.thisObject as? Activity ?: return@hookAfter
-            activity.window.decorView.post {
+            ModuleViewTaskRegistry.post(activity.window.decorView) {
                 dispatchActivityReady(activity, "activity:onPostResume")
             }
         }
@@ -90,7 +91,7 @@ internal class ModuleSettingsHookInstaller(
             val activity = chain.thisObject as? Activity ?: return@hookAfter
             val hasFocus = chain.args.firstOrNull() as? Boolean ?: return@hookAfter
             if (hasFocus) {
-                activity.window.decorView.post {
+                ModuleViewTaskRegistry.post(activity.window.decorView) {
                     dispatchActivityReady(activity, "activity:onWindowFocus")
                 }
             }

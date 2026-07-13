@@ -79,6 +79,23 @@ object ModuleFileLogger {
         }
     }
 
+    fun shutdownForHotReload() {
+        val thread = synchronized(lock) {
+            val currentThread = handlerThread
+            handler = null
+            handlerThread = null
+            writer = null
+            initialized = false
+            fileLoggingEnabled = false
+            earlyLines.clear()
+            droppedEarlyLines = 0
+            currentThread
+        } ?: return
+        thread.quitSafely()
+        runCatching { thread.join(1_500L) }
+            .onFailure { throwable -> Log.w(TAG, "Failed waiting for logger shutdown", throwable) }
+    }
+
     fun clear(context: Context): Boolean {
         val appContext = context.applicationContext ?: context
         val dir = File(appContext.filesDir, LOG_DIR)

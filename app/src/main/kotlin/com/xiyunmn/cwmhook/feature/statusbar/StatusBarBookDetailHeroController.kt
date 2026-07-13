@@ -125,6 +125,18 @@ internal class StatusBarBookDetailHeroController(
         // status-bar color change in the last visible frames.
     }
 
+    fun clearForHotReload(windows: List<Window>) {
+        val trackedWindows = (windows + states.keys + handoffs.keys).distinct()
+        trackedWindows.forEach { window ->
+            runCatching {
+                clear(window)
+                clearHandoff(window)
+            }
+        }
+        states.clear()
+        handoffs.clear()
+    }
+
     fun beginHandoff(sourceWindow: Window, targetWindow: Window): Int? {
         val sourceState = states[sourceWindow] ?: return null
         clearHandoff(targetWindow)

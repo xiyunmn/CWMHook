@@ -7,6 +7,7 @@ import android.os.Looper
 import android.widget.Toast
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 
 internal class AutoSignInExecutor(
     classLoader: ClassLoader,
@@ -116,6 +117,18 @@ internal class AutoSignInExecutor(
         }
     }
 
+    fun shutdownIfIdle(): Boolean {
+        synchronized(lock) {
+            if (inFlight) {
+                return false
+            }
+        }
+        mainHandler.removeCallbacksAndMessages(null)
+        return true
+    }
+
+    fun isIdle(): Boolean = synchronized(lock) { !inFlight }
+
     private fun successMessage(trigger: Trigger, result: AutoSignInHostBridge.HostResult): String {
         val prefix = if (trigger == Trigger.AUTO) "自动签到成功" else "签到成功"
         return prefix + result.reward.toToastSuffix()
@@ -142,7 +155,7 @@ internal class AutoSignInExecutor(
             if (liveActivity == null) {
                 showToast.run()
             } else {
-                liveActivity.window.decorView.post(showToast)
+                ModuleViewTaskRegistry.post(liveActivity.window.decorView) { showToast.run() }
             }
         }
     }

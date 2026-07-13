@@ -41,6 +41,7 @@ import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.core.hostui.HostSkinPalette
 import com.xiyunmn.cwmhook.core.hostui.HostSkinResolver
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import java.util.Locale
 
@@ -78,9 +79,7 @@ internal class ChapterExportSelectionWindow(
     private val activeDownloadType: String?
         get() = downloadType ?: restoreState?.downloadType
     private val expandCollapseInterpolator = DecelerateInterpolator()
-    private val themeRefreshRunnable = Runnable {
-        refreshTheme(pendingThemeRefreshReason.ifBlank { "SkinChangeHelper" })
-    }
+    private var themeRefreshGeneration = 0
 
     fun show() {
         runCatching {
@@ -184,7 +183,7 @@ internal class ChapterExportSelectionWindow(
             capturePendingRestore("dialog dismissed")
         }
         unregisterWindow(this)
-        rootView?.removeCallbacks(themeRefreshRunnable)
+        themeRefreshGeneration++
         formatSystemBarAnimator?.cancel()
         formatSystemBarAnimator = null
         dialog = null
@@ -232,7 +231,7 @@ internal class ChapterExportSelectionWindow(
                 candidates.filter { it.isExportable() }.forEach { selectedIds.add(it.chapterId) }
                 listView.adapter = RowAdapter()
                 listView.visibility = View.VISIBLE
-                listView.post {
+                ModuleViewTaskRegistry.post(listView) {
                     listView.invalidateViews()
                     ModuleFileLogger.i(
                         TAG,
@@ -278,7 +277,7 @@ internal class ChapterExportSelectionWindow(
         listView.adapter = RowAdapter()
         listView.visibility = View.VISIBLE
         updateFooter()
-        listView.post {
+        ModuleViewTaskRegistry.post(listView) {
             if (rows.isNotEmpty()) {
                 listView.setSelection(state.firstVisiblePosition.coerceIn(0, rows.lastIndex))
             }
@@ -856,10 +855,10 @@ internal class ChapterExportSelectionWindow(
             }
             editText.requestFocus()
             editText.selectAll()
-            editText.postDelayed({
+            ModuleViewTaskRegistry.post(editText, 120L) {
                 (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                     ?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
-            }, 120L)
+            }
         }
         namingDialog.show()
         namingDialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
@@ -1031,15 +1030,19 @@ internal class ChapterExportSelectionWindow(
 
     private fun scheduleDirectoryRefresh() {
         listOf(800L, 1800L, 3500L, 6500L).forEach { delay ->
-            directoryText.postDelayed({ refreshDirectoryLabel() }, delay)
+            ModuleViewTaskRegistry.post(directoryText, delay) { refreshDirectoryLabel() }
         }
     }
 
     private fun scheduleThemeRefresh(reason: String) {
         val root = rootView ?: return
         pendingThemeRefreshReason = reason
-        root.removeCallbacks(themeRefreshRunnable)
-        root.postDelayed(themeRefreshRunnable, 220L)
+        val generation = ++themeRefreshGeneration
+        ModuleViewTaskRegistry.post(root, 220L) {
+            if (themeRefreshGeneration == generation) {
+                refreshTheme(pendingThemeRefreshReason.ifBlank { "SkinChangeHelper" })
+            }
+        }
     }
 
     private fun capturePendingRestore(reason: String) {
@@ -1056,7 +1059,7 @@ internal class ChapterExportSelectionWindow(
     private fun detachFromDestroyedHost() {
         val currentDialog = dialog
         currentDialog?.setOnDismissListener(null)
-        rootView?.removeCallbacks(themeRefreshRunnable)
+        themeRefreshGeneration++
         formatSystemBarAnimator?.cancel()
         formatSystemBarAnimator = null
         dialog = null
@@ -1094,7 +1097,7 @@ internal class ChapterExportSelectionWindow(
     }
 
     private fun animateVisibleRowsAfterExpandCollapse() {
-        listView.post {
+        ModuleViewTaskRegistry.post(listView) {
             repeat(listView.childCount) { index ->
                 val child = listView.getChildAt(index) ?: return@repeat
                 child.animate().cancel()
@@ -1822,6 +1825,16 @@ internal class ChapterExportSelectionWindow(
             }
         }
 
+        fun detachAllForHotReload() {
+            val windows = synchronized(activeWindows) {
+                val snapshot = activeWindows.toList()
+                activeWindows.clear()
+                pendingRestore = null
+                snapshot
+            }
+            windows.forEach { it.detachFromDestroyedHost() }
+        }
+
         fun restoreIfNeeded(
             activity: Activity,
             exporter: ChapterBackupExporter,
@@ -1849,8 +1862,7 @@ internal class ChapterExportSelectionWindow(
                 pendingRestore = null
                 pending
             }
-            activity.window.decorView.postDelayed(
-                {
+            ModuleViewTaskRegistry.post(activity.window.decorView, 80L) {
                     if (!activity.isFinishing && !activity.isDestroyedCompat()) {
                         ChapterExportSelectionWindow(activity, exporter, bookInfo, downloadType ?: state.downloadType, state).show()
                         ModuleFileLogger.i(
@@ -1858,9 +1870,7 @@ internal class ChapterExportSelectionWindow(
                             "Chapter export selector restored after host recreate: reason=$reason activity=${activity.javaClass.name} book=${state.book.bookId}, loaded=${state.hasCandidates}",
                         )
                     }
-                },
-                80L,
-            )
+                }
             return true
         }
 
@@ -1869,7 +1879,7 @@ internal class ChapterExportSelectionWindow(
             while (iterator.hasNext()) {
                 val window = iterator.next()
                 if (!window.isShowing() || window.activity.isFinishing || window.activity.isDestroyedCompat()) {
-                    window.rootView?.removeCallbacks(window.themeRefreshRunnable)
+                    window.themeRefreshGeneration++
                     iterator.remove()
                 }
             }

@@ -16,6 +16,13 @@ local.properties
 key/
 *.jks
 *.keystore
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
 
 # Runtime output and local-only notes
 local_docs/
@@ -30,10 +37,16 @@ build.log
 *.apks
 *.aab
 *.dex
+*.so
+*.db
+*.sqlite
+*.pcap
+*.har
 
 # Reverse-engineering materials stay local and are never published
 /Target_app/
 /target_app/
+/tools/
 /tmp_jadx_async/
 
 # Local backups and archives

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CWMHook</string>
-    <string name="module_description">LSPosed module for Ciweimao Novel, built on libxposed API 101.</string>
+    <string name="module_description">刺猬猫阅读增强 Xposed 模块 - 界面优化、字体管理、自动签到\n模块入口：长按书架页或阅读页的“更多”按钮</string>
 </resources>

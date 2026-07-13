@@ -32,6 +32,7 @@ import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.core.hostui.HostSkinResolver
 import com.xiyunmn.cwmhook.core.icons.CommonIconPainter
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import java.io.File
 import java.util.Locale
 import kotlin.math.min
@@ -973,15 +974,15 @@ internal class ReaderFontSettingsInjector(
     private fun constrainReaderMenuFontLabel(root: View, textView: TextView) {
         val context = textView.context
         textView.maxWidth = dp(context, 116)
-        root.post {
-            val selector = textView.parent as? ViewGroup ?: return@post
-            val parentRow = selector.parent as? ViewGroup ?: return@post
+        ModuleViewTaskRegistry.post(root) constrain@{
+            val selector = textView.parent as? ViewGroup ?: return@constrain
+            val parentRow = selector.parent as? ViewGroup ?: return@constrain
             val sizeControls = parentRow.findViewById<View>(
                 root.resources.getIdentifier("lay1", "id", root.context.packageName),
             )
             val rowWidth = parentRow.width - parentRow.paddingLeft - parentRow.paddingRight
             if (rowWidth <= 0) {
-                return@post
+                return@constrain
             }
             compactReaderMenuSizeControls(sizeControls, rowWidth)
             val usedBySizeControls = sizeControls?.let { measuredWidthWithMargins(it) } ?: 0

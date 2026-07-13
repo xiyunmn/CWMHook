@@ -25,4 +25,10 @@ internal class StatusBarTransientOverlayRegistry(
             visibleActivities[activity] == true
         }
     }
+
+    fun clearForHotReload() {
+        synchronized(visibleActivities) {
+            visibleActivities.clear()
+        }
+    }
 }

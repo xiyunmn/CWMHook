@@ -13,6 +13,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabDragAutoScroller
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.ui.bottomtab.BottomTabDragTargetResolver
 import com.xiyunmn.cwmhook.ui.bottomtab.bottomTabRowSlotHeight
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
@@ -164,10 +165,13 @@ private class ReaderFontDragController(
     private var rowSlotHeight = 0
     private val autoScroller = BottomTabDragAutoScroller(row, container)
     private val scrollHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val longPressRunnable = Runnable {
-        if (!dragging && !longPressTriggered) {
-            longPressTriggered = true
-            row.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    private val longPressRunnable = object : Runnable {
+        override fun run() {
+            ModuleViewTaskRegistry.untrack(this)
+            if (!dragging && !longPressTriggered) {
+                longPressTriggered = true
+                row.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            }
         }
     }
     private val autoScrollRunnable = object : Runnable {
@@ -175,6 +179,8 @@ private class ReaderFontDragController(
             if (dragging) {
                 autoScroller.scrollIfNeeded()
                 scrollHandler.postDelayed(this, 50L)
+            } else {
+                ModuleViewTaskRegistry.untrack(this)
             }
         }
     }
@@ -189,6 +195,7 @@ private class ReaderFontDragController(
                 startIndex = paths.indexOf(path)
                 targetIndex = startIndex
                 rowSlotHeight = row.bottomTabRowSlotHeight()
+                ModuleViewTaskRegistry.track(scrollHandler, longPressRunnable)
                 scrollHandler.postDelayed(longPressRunnable, 300L)
                 return true
             }
@@ -202,10 +209,12 @@ private class ReaderFontDragController(
                     row.elevation = dp(row.context, 12).toFloat()
                     row.translationZ = dp(row.context, 12).toFloat()
                     row.animate().scaleX(0.98f).scaleY(0.98f).alpha(0.96f).setDuration(90L).start()
+                    ModuleViewTaskRegistry.track(scrollHandler, autoScrollRunnable)
                     scrollHandler.post(autoScrollRunnable)
                 }
                 if (!longPressTriggered && dy > touchSlop) {
                     scrollHandler.removeCallbacks(longPressRunnable)
+                    ModuleViewTaskRegistry.untrack(longPressRunnable)
                 }
                 if (dragging) {
                     row.translationY = event.rawY - downRawY
@@ -227,10 +236,12 @@ private class ReaderFontDragController(
             MotionEvent.ACTION_CANCEL,
             -> {
                 scrollHandler.removeCallbacks(longPressRunnable)
+                ModuleViewTaskRegistry.untrack(longPressRunnable)
                 if (!dragging) {
                     return false
                 }
                 scrollHandler.removeCallbacks(autoScrollRunnable)
+                ModuleViewTaskRegistry.untrack(autoScrollRunnable)
                 view.parent?.requestDisallowInterceptTouchEvent(false)
                 container.parent?.requestDisallowInterceptTouchEvent(false)
                 val moved = event.actionMasked == MotionEvent.ACTION_UP && movePath()

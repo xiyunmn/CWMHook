@@ -1,6 +1,6 @@
 # CWMHook
 
-CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，基于现代 libxposed API 101 开发。
+CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，当前模块版本为 `1.0.0`，基于现代 libxposed API 102 开发。
 
 当前主要适配：
 
@@ -11,12 +11,14 @@ com.kuangxiangciweimao.novel
 
 ## 安装
 
-1. 在支持 libxposed API 101 的框架中安装并启用模块。
+1. 在支持 libxposed API 102 的 LSPosed v2.1.0 中安装并启用模块。
 2. 将作用域设置为刺猬猫阅读。
 3. 强制停止并重新启动刺猬猫阅读。
 4. 长按书架页或阅读页的“更多”按钮进入模块设置。
 
-未 Root 设备可使用 NPatch 等支持 libxposed 的免 Root 框架，实际兼容性以所用框架为准。
+首次从本模块 API 101 版本升级到 API 102 版本时，旧代码没有热重载回调，仍需正常重启一次目标进程。后续安装新版 APK 时由 `autoHotReload` 自动重载。模块不提供桌面入口或独立控制台。
+
+其它框架即使能加载现代模块，也不代表已经完整实现 API 102 热重载；当前经过验证的支持版本为 LSPosed v2.1.0。
 
 ## 主要功能
 
@@ -27,6 +29,15 @@ com.kuangxiangciweimao.novel
 - 导入和管理阅读字体。
 - 自动签到与手动签到。
 - 将个人已拥有阅读权限或已缓存的章节导出为 TXT/EPUB。
+- API 102 原地热重载：稳定 Hook ID、原子替换和旧代际资源清理。
+
+## 热重载边界
+
+- 自动签到请求、章节导出或宿主章节下载进行中时会拒绝热重载，避免旧代际回调被提前卸载。
+- 热重载会关闭模块设置/章节导出窗口、解绑模块监听、清理注入 View、停止模块线程，并重建当前前台 Activity。
+- 配置仍保存在宿主本地 `SharedPreferences`，配置保存后按各功能既有机制生效；热重载只用于替换模块代码，不用于同步配置。
+- 模块没有手动热重载入口；安装新版 APK 后由 LSPosed v2.1.0 根据 `autoHotReload=true` 自动触发。
+- 当前支持 API 102 的框架版本为 LSPosed v2.1.0；旧版 LSPosed v1.x 不支持本模块。
 
 宿主版本更新后，部分功能可能因内部实现变化而失效。遇到异常时请先关闭对应功能，并提供宿主版本、模块版本、复现步骤和详细日志。
 
@@ -44,5 +55,11 @@ com.kuangxiangciweimao.novel
 
 ```powershell
 .\gradlew.bat verifyArchitecture
-.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:lintDebug :app:assembleDebug :app:assembleBeta :app:assembleRelease
 ```
+
+构建需要 JDK 17 和 Android SDK Platform 37；应用 `targetSdk` 当前保持 36。
+
+版本与产物规则参考 PureDuPan：release 为 `1.0.0 (10000)`，beta 为 `1.0.0-beta (10050)`，debug 为 `1.0.0-debug (10099)`；APK 会分别命名为 `CWMHook-v1.0.0-{debug|beta|release}.apk`。
+
+`.github/workflows/` 提供 Debug、Beta 和 Release 三组手动构建任务。Beta/Release 签名需要配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 四个 GitHub Actions Secrets；本地未提供完整签名参数时会生成未签名 APK。

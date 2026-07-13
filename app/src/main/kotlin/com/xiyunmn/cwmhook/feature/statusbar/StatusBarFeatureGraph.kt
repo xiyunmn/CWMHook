@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import io.github.libxposed.api.XposedModule
 
 internal class StatusBarFeatureGraph(
@@ -166,7 +167,7 @@ internal class StatusBarFeatureGraph(
             windowController.applySystemBarAppearance(activity.window, activity.window.decorView, overlayColor)
         }
         if (!visible) {
-            activity.window.decorView.post {
+            ModuleViewTaskRegistry.post(activity.window.decorView) {
                 runtimeApplier.apply(activity.window, "transientOverlayClosed", forceSample = true)
             }
         }
@@ -177,5 +178,15 @@ internal class StatusBarFeatureGraph(
             tag = config.logTag,
             message = "transient overlay visible=$visible activity=${activity.javaClass.name}",
         )
+    }
+
+    fun prepareForHotReload(activities: List<Activity>) {
+        val windows = activities.map { it.window }
+        runtimeApplier.prepareForHotReload(windows)
+        windowController.prepareForHotReload(windows)
+        paddingController.restoreAllForHotReload()
+        scrimController.clearForHotReload()
+        transientOverlayRegistry.clearForHotReload()
+        windowRegistry.clearForHotReload()
     }
 }
