@@ -90,7 +90,6 @@ internal class StatusBarRuntimeApplier(
             val surfaceColor = if (topInset > 0) {
                 colorResolver.directSceneColor(decorView.context, skinKey, sceneKey)
                     ?: state.cachedColor
-                    ?: window.statusBarColor.takeIf { Color.alpha(it) == 255 }
                     ?: colorResolver.fallbackColor(decorView.context, skinKey)
             } else {
                 null

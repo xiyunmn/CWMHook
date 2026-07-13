@@ -26,7 +26,7 @@ internal class StatusBarColorSampler(
             sceneKey.endsWith("|recharge") -> sampleRenderedStrip(appRoot, 1)
             else -> sampleClosestTarget(
                 appRoot,
-                listOf("titleLayout", "title_layout", "titleLay", "layout_title_bar"),
+                listOf("titleLayout", "titleLayout2", "title_layout", "titleLay", "layout_title_bar"),
             )
         }
     }
