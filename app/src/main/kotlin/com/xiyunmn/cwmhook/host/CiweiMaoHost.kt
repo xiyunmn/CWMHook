@@ -42,6 +42,7 @@ object CiweiMaoClasses {
     const val FIND_FRAGMENT = "com.kuangxiangciweimao.novel.activity.frame.FragmentFind"
     const val MINE_FRAGMENT = "com.kuangxiangciweimao.novel.activity.frame.Fragment5"
     const val BOOK_DETAIL_ACTIVITY = "com.kuangxiangciweimao.novel.activity.bookshelf.detail.BookDetailActivity"
+    const val BOOK_INFO_TOP_LAYOUT = "com.kuangxiangciweimao.novel.activity.bookshelf.detail.BookInfoTopLayout"
     const val RECHARGE_ACTIVITY = "com.kuangxiangciweimao.novel.activity.my.pay.PayMainActicvity"
     const val RECOMMEND_VIEW_FRAGMENT_PREFIX =
         "com.kuangxiangciweimao.novel.activity.frame.recommendviews.fragment."

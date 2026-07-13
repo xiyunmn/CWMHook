@@ -1,5 +1,6 @@
 ﻿package com.xiyunmn.cwmhook.feature.statusbar
 
+import android.app.Activity
 import android.view.View
 import android.view.Window
 import io.github.libxposed.api.XposedModule
@@ -10,6 +11,11 @@ internal class StatusBarHookInstaller(
     private val isApplying: () -> Boolean,
     private val applyWindow: (Window, String, Boolean, String?) -> Unit,
     private val updateReaderMenuSurface: (Window, Int?) -> Unit,
+    private val captureBookDetailHero: (Activity, View) -> Unit,
+    private val updateBookDetailScroll: (Activity, Int) -> Boolean,
+    private val onBookDetailResume: (Activity) -> Unit,
+    private val onBookDetailPause: (Activity) -> Unit,
+    private val onBookDetailDestroy: (Activity) -> Unit,
     private val applyIfNeeded: (Window, String) -> Unit,
     private val shouldManageWindow: (Window) -> Boolean,
     private val ensureTransparentStatusBarColor: (Window) -> Unit,
@@ -29,6 +35,11 @@ internal class StatusBarHookInstaller(
         windowRegistry = windowRegistry,
         applyWindow = applyWindow,
         updateReaderMenuSurface = updateReaderMenuSurface,
+        captureBookDetailHero = captureBookDetailHero,
+        updateBookDetailScroll = updateBookDetailScroll,
+        onBookDetailResume = onBookDetailResume,
+        onBookDetailPause = onBookDetailPause,
+        onBookDetailDestroy = onBookDetailDestroy,
         scheduleApplyForPageView = scheduleApplyForPageView,
         scheduleKnownWindows = scheduleKnownWindows,
         applyFragmentWindow = applyFragmentWindow,

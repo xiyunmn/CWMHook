@@ -88,6 +88,11 @@ internal class StatusBarFeatureGraph(
             runtimeApplier.apply(window, reason, forceSample, sceneKeyOverride)
         },
         updateReaderMenuSurface = runtimeApplier::updateReaderMenuSurface,
+        captureBookDetailHero = runtimeApplier::captureBookDetailHero,
+        updateBookDetailScroll = runtimeApplier::updateBookDetailScroll,
+        onBookDetailResume = runtimeApplier::onBookDetailResume,
+        onBookDetailPause = runtimeApplier::onBookDetailPause,
+        onBookDetailDestroy = runtimeApplier::onBookDetailDestroy,
         applyIfNeeded = runtimeApplier::applyIfNeeded,
         shouldManageWindow = runtimeApplier::shouldManageWindow,
         ensureTransparentStatusBarColor = runtimeApplier::ensureTransparentStatusBarColor,

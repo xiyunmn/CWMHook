@@ -1,31 +1,46 @@
+# Build outputs
 .gradle/
 .kotlin/
-.idea/
 build/
 */build/
 app/.cxx/
 app/release/
-local.properties
+
+# IDE and local assistant state
+.idea/
+.claude/
 *.iml
 
-# Android artifacts
+# Local machine config and signing material
+local.properties
+key/
+*.jks
+*.keystore
+
+# Runtime output and local-only notes
+local_docs/
+log/
+build.log
+*.log
+*.prof
+*.hprof
+
+# Android packages and generated binaries
 *.apk
 *.apks
 *.aab
 *.dex
-*.prof
-*.hprof
 
-# Runtime/debug output
-log/
-*.log
+# Reverse-engineering materials stay local and are never published
+/Target_app/
+/target_app/
+/tmp_jadx_async/
 
-# Local reverse-engineering bulk artifacts. Keep these on disk, but track
-# curated maintenance docs under Target_app/逆向分析/00_总报告.
-Target_app/*.apk
-Target_app/*.zip
-Target_app/逆向分析/01_APKTool_资源与Manifest/
-Target_app/逆向分析/02_JADX_APK静态反编译/
-Target_app/逆向分析/03_运行时DumpDex/
-Target_app/逆向分析/04_JADX_运行时Dex反编译/
-Target_app/逆向分析/05_IDA_Native分析/
+# Local backups and archives
+*-备份/
+*.zip
+*.7z
+*.rar
+
+# Stray generated package directories
+/io/

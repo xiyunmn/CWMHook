@@ -53,6 +53,26 @@ internal class StatusBarWindowController {
         }
     }
 
+    fun applyStatusBarIconAppearance(window: Window, lightStatusBar: Boolean) {
+        val decorView = window.decorView
+        val currentFlags = decorView.systemUiVisibility
+        val nextFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && lightStatusBar) {
+            currentFlags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        } else {
+            currentFlags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+        }
+        if (nextFlags != currentFlags) {
+            decorView.systemUiVisibility = nextFlags
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val appearance = if (lightStatusBar) WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS else 0
+            window.insetsController?.setSystemBarsAppearance(
+                appearance,
+                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+            )
+        }
+    }
+
     fun applyReaderStatusBarFrame(
         window: Window,
         decorView: View,

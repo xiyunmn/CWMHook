@@ -7,6 +7,7 @@ import android.view.View
 import android.view.Window
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import java.util.Locale
+import java.util.WeakHashMap
 
 internal class StatusBarRuntimeApplier(
     private val sceneRules: StatusBarSceneRules,
@@ -35,6 +36,8 @@ internal class StatusBarRuntimeApplier(
         scrimController = scrimController,
         windowController = windowController,
     )
+    private val bookDetailHeroController = StatusBarBookDetailHeroController(windowController)
+    private val bookDetailCaptureGenerations = WeakHashMap<Window, Int>()
 
     fun apply(
         window: Window,
@@ -49,6 +52,12 @@ internal class StatusBarRuntimeApplier(
         try {
             val decorView = window.decorView
             if (isApplyBlocked(window, reason)) {
+                if (applyPolicy.applyBlockReason(window) == "disabled") {
+                    bookDetailHeroController.clear(window)
+                }
+                return
+            }
+            if (bookDetailHeroController.reapplyHandoffIfActive(window)) {
                 return
             }
             val state = windowRegistry.state(window)
@@ -56,6 +65,16 @@ internal class StatusBarRuntimeApplier(
             val readerScene = sceneRules.isReaderScene(sceneKey)
             if (readerScene) {
                 return
+            }
+            if (sceneRules.isBookDetailScene(sceneKey)) {
+                val activity = windowRegistry.findActivityForWindow(window, decorView)
+                if (activity != null && !bookDetailHeroController.reapplyIfActive(window)) {
+                    captureCurrentBookDetailHero(activity)
+                    scheduleBookDetailHeroCapture(activity)
+                }
+                if (bookDetailHeroController.reapplyIfActive(window)) {
+                    return
+                }
             }
             val skinKey = colorResolver.currentSkinKey(decorView.context)
             val persistedColor: Int? = null
@@ -168,6 +187,104 @@ internal class StatusBarRuntimeApplier(
         )
     }
 
+    fun captureBookDetailHero(activity: android.app.Activity, heroBackgroundView: View) {
+        val window = activity.window
+        val blockReason = applyPolicy.applyBlockReason(window)
+        if (blockReason != null) {
+            if (blockReason == "disabled") {
+                bookDetailHeroController.clear(window)
+            }
+            return
+        }
+        windowRegistry.rememberActivityWindow(activity)
+        val scrollY = bookDetailScrollView(activity)?.scrollY ?: 0
+        bookDetailHeroController.capture(window, heroBackgroundView, scrollY)
+    }
+
+    fun updateBookDetailScroll(activity: android.app.Activity, scrollY: Int): Boolean {
+        val window = activity.window
+        val blockReason = applyPolicy.applyBlockReason(window)
+        if (blockReason != null) {
+            if (blockReason == "disabled") {
+                bookDetailHeroController.clear(window)
+            }
+            return false
+        }
+        windowRegistry.rememberActivityWindow(activity)
+        return bookDetailHeroController.updateScroll(window, scrollY)
+    }
+
+    fun onBookDetailResume(activity: android.app.Activity) {
+        Log.i(BOOK_DETAIL_PROBE_TAG, "resume activity=${probeId(activity)} window=${probeId(activity.window)}")
+        windowRegistry.rememberActivityWindow(activity)
+        val scrollView = bookDetailScrollView(activity)
+        scrollView?.overScrollMode = View.OVER_SCROLL_NEVER
+        bookDetailHeroController.updateScroll(activity.window, scrollView?.scrollY ?: 0)
+        captureCurrentBookDetailHero(activity)
+        scheduleBookDetailHeroCapture(activity)
+    }
+
+    fun onBookDetailPause(activity: android.app.Activity) {
+        Log.i(BOOK_DETAIL_PROBE_TAG, "pause activity=${probeId(activity)} window=${probeId(activity.window)}")
+    }
+
+    fun onBookDetailDestroy(activity: android.app.Activity) {
+        Log.i(BOOK_DETAIL_PROBE_TAG, "destroy activity=${probeId(activity)} window=${probeId(activity.window)}")
+        synchronized(bookDetailCaptureGenerations) {
+            bookDetailCaptureGenerations.remove(activity.window)
+        }
+        bookDetailHeroController.release(activity.window)
+    }
+
+    private fun captureCurrentBookDetailHero(activity: android.app.Activity): Boolean {
+        if (activity.isFinishing || (android.os.Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return false
+        val heroViewId = activity.resources.getIdentifier(
+            "mainlay",
+            "id",
+            activity.packageName,
+        )
+        if (heroViewId == 0) return false
+        val heroView = activity.findViewById<View>(heroViewId) ?: return false
+        val scrollY = bookDetailScrollView(activity)?.scrollY ?: 0
+        val captured = bookDetailHeroController.capture(activity.window, heroView, scrollY)
+        if (captured) {
+            synchronized(bookDetailCaptureGenerations) {
+                bookDetailCaptureGenerations.remove(activity.window)
+            }
+        }
+        return captured
+    }
+
+    private fun scheduleBookDetailHeroCapture(activity: android.app.Activity) {
+        val window = activity.window
+        val generation = synchronized(bookDetailCaptureGenerations) {
+            val next = (bookDetailCaptureGenerations[window] ?: 0) + 1
+            bookDetailCaptureGenerations[window] = next
+            next
+        }
+        BOOK_DETAIL_CAPTURE_RETRY_MS.forEach { delayMs ->
+            window.decorView.postDelayed({
+                val current = synchronized(bookDetailCaptureGenerations) {
+                    bookDetailCaptureGenerations[window]
+                }
+                if (current != generation) return@postDelayed
+                if (captureCurrentBookDetailHero(activity)) {
+                    bookDetailHeroController.reapplyIfActive(window)
+                }
+            }, delayMs)
+        }
+    }
+
+    private fun bookDetailScrollView(activity: android.app.Activity): View? {
+        val scrollViewId = activity.resources.getIdentifier(
+            "scroolview",
+            "id",
+            activity.packageName,
+        )
+        if (scrollViewId == 0) return null
+        return activity.findViewById(scrollViewId)
+    }
+
     private fun isApplyBlocked(window: Window, reason: String): Boolean {
         val blockReason = applyPolicy.applyBlockReason(window) ?: return false
         if (blockReason != "disabled") {
@@ -181,4 +298,11 @@ internal class StatusBarRuntimeApplier(
         }
         return true
     }
+
+    private companion object {
+        const val BOOK_DETAIL_PROBE_TAG = "CWMHook.BookDetailProbe"
+        val BOOK_DETAIL_CAPTURE_RETRY_MS = longArrayOf(80L, 240L, 600L)
+    }
+
+    private fun probeId(value: Any): String = Integer.toHexString(System.identityHashCode(value))
 }

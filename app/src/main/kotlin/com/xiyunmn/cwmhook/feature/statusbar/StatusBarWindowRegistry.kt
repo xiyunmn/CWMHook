@@ -84,6 +84,16 @@ internal class StatusBarWindowRegistry(
         return findActivity(decorView?.context ?: window.context)
     }
 
+    fun findWindowForActivity(activityName: String): Window? {
+        synchronized(windowActivities) {
+            return windowActivities.entries.firstOrNull { (window, activity) ->
+                activity.javaClass.name == activityName && activity.window === window &&
+                    !activity.isFinishing &&
+                    (android.os.Build.VERSION.SDK_INT < 17 || !activity.isDestroyed)
+            }?.key
+        }
+    }
+
     fun findActivity(context: Context?): Activity? {
         var current = context
         repeat(12) {

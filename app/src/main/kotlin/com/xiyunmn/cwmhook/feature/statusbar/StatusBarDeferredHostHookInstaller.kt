@@ -1,5 +1,6 @@
 package com.xiyunmn.cwmhook.feature.statusbar
 
+import android.app.Activity
 import android.view.View
 import android.view.Window
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
@@ -10,6 +11,11 @@ internal class StatusBarDeferredHostHookInstaller(
     private val windowRegistry: StatusBarWindowRegistry,
     private val applyWindow: (Window, String, Boolean, String?) -> Unit,
     private val updateReaderMenuSurface: (Window, Int?) -> Unit,
+    private val captureBookDetailHero: (Activity, View) -> Unit,
+    private val updateBookDetailScroll: (Activity, Int) -> Boolean,
+    private val onBookDetailResume: (Activity) -> Unit,
+    private val onBookDetailPause: (Activity) -> Unit,
+    private val onBookDetailDestroy: (Activity) -> Unit,
     private val scheduleApplyForPageView: (View, String) -> Unit,
     private val scheduleKnownWindows: (String) -> Unit,
     private val applyFragmentWindow: (Any?, Method, Method?, String) -> Unit,
@@ -44,6 +50,11 @@ internal class StatusBarDeferredHostHookInstaller(
     private val bookDetailHooks = StatusBarBookDetailHookInstaller(
         windowRegistry = windowRegistry,
         applyWindow = applyWindow,
+        captureBookDetailHero = captureBookDetailHero,
+        updateBookDetailScroll = updateBookDetailScroll,
+        onBookDetailResume = onBookDetailResume,
+        onBookDetailPause = onBookDetailPause,
+        onBookDetailDestroy = onBookDetailDestroy,
         hookHelper = hookHelper,
         logTag = logTag,
     )
