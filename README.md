@@ -63,3 +63,9 @@ com.kuangxiangciweimao.novel
 版本与产物规则参考 PureDuPan：release 为 `1.0.0 (10000)`，beta 为 `1.0.0-beta (10050)`，debug 为 `1.0.0-debug (10099)`；APK 会分别命名为 `CWMHook-v1.0.0-{debug|beta|release}.apk`。
 
 `.github/workflows/` 提供 Debug、Beta 和 Release 三组手动构建任务。Beta/Release 签名需要配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 四个 GitHub Actions Secrets；本地未提供完整签名参数时会生成未签名 APK。
+
+## 开源许可
+
+Copyright (C) 2026 xiyunmn
+
+本项目依据 [GNU General Public License v3.0](LICENSE)（SPDX：`GPL-3.0-only`）开源。分发或修改本项目时必须遵守许可证规定，并向接收者提供对应源代码和相同的许可权利。本许可证不涵盖刺猬猫阅读、导出内容或其他第三方作品；相关权利仍归各自权利人所有。
