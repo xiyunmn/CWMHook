@@ -16,6 +16,8 @@ internal object RewardNetworkCapture {
     private const val TAG = "CWMHook.RewardNetCap"
 
     @Volatile
+    private var enabled = false
+    @Volatile
     private var captureArmed = false
     @Volatile
     private var httpInstalled = false
@@ -38,13 +40,26 @@ internal object RewardNetworkCapture {
     @Volatile
     private var lastClassLoader: ClassLoader? = null
 
+    fun configure(enabled: Boolean) {
+        this.enabled = enabled
+        if (!enabled) {
+            captureArmed = false
+        }
+    }
+
     fun install(module: XposedModule, classLoader: ClassLoader) {
+        if (!enabled) {
+            return
+        }
         lastModule = module
         lastClassLoader = classLoader
         installAll(module, classLoader)
     }
 
     fun installAll(module: XposedModule, classLoader: ClassLoader) {
+        if (!enabled) {
+            return
+        }
         lastModule = module
         lastClassLoader = classLoader
         installHttpUrlConnectionProbe(module)
@@ -64,6 +79,9 @@ internal object RewardNetworkCapture {
     }
 
     fun arm(reason: String, classLoader: ClassLoader? = null) {
+        if (!enabled) {
+            return
+        }
         captureArmed = true
         // Classes may only appear after ad SDK loads.
         val module = lastModule
@@ -77,11 +95,17 @@ internal object RewardNetworkCapture {
     }
 
     fun disarm(reason: String) {
+        if (!enabled) {
+            return
+        }
         captureArmed = false
         emit("CAPTURE DISARMED reason=$reason")
     }
 
     private fun emit(message: String) {
+        if (!enabled) {
+            return
+        }
         Log.i(TAG, message)
         ModuleFileLogger.i(TAG, message)
         runCatching { XposedCompat.module?.log(Log.INFO, TAG, message) }

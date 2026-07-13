@@ -46,7 +46,7 @@ internal class StatusBarRuntimeApplier(
         forceSample: Boolean = false,
         sceneKeyOverride: String? = null,
     ) {
-        if (applying.get()) {
+        if (applying.get() == true) {
             return
         }
         applying.set(true)
@@ -115,7 +115,7 @@ internal class StatusBarRuntimeApplier(
     }
 
     fun applyIfNeeded(window: Window, reason: String) {
-        if (applying.get()) {
+        if (applying.get() == true) {
             return
         }
         val decorView = window.decorView
@@ -215,7 +215,6 @@ internal class StatusBarRuntimeApplier(
     }
 
     fun onBookDetailResume(activity: android.app.Activity) {
-        Log.i(BOOK_DETAIL_PROBE_TAG, "resume activity=${probeId(activity)} window=${probeId(activity.window)}")
         windowRegistry.rememberActivityWindow(activity)
         val scrollView = bookDetailScrollView(activity)
         scrollView?.overScrollMode = View.OVER_SCROLL_NEVER
@@ -225,11 +224,9 @@ internal class StatusBarRuntimeApplier(
     }
 
     fun onBookDetailPause(activity: android.app.Activity) {
-        Log.i(BOOK_DETAIL_PROBE_TAG, "pause activity=${probeId(activity)} window=${probeId(activity.window)}")
     }
 
     fun onBookDetailDestroy(activity: android.app.Activity) {
-        Log.i(BOOK_DETAIL_PROBE_TAG, "destroy activity=${probeId(activity)} window=${probeId(activity.window)}")
         synchronized(bookDetailCaptureGenerations) {
             bookDetailCaptureGenerations.remove(activity.window)
         }
@@ -307,9 +304,6 @@ internal class StatusBarRuntimeApplier(
     }
 
     private companion object {
-        const val BOOK_DETAIL_PROBE_TAG = "CWMHook.BookDetailProbe"
         val BOOK_DETAIL_CAPTURE_RETRY_MS = longArrayOf(80L, 240L, 600L)
     }
-
-    private fun probeId(value: Any): String = Integer.toHexString(System.identityHashCode(value))
 }

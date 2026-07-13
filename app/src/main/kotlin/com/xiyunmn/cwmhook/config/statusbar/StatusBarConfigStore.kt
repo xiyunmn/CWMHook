@@ -39,12 +39,14 @@ object StatusBarConfigStore {
     fun writeLocal(context: Context, config: StatusBarConfig): Boolean {
         return runCatching {
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            prefs.edit()
+            val saved = prefs.edit()
                 .putBoolean(KEY_ENABLED, config.enabled)
                 .putInt(KEY_VERSION, config.version)
-                .apply()
-            ModuleFileLogger.i(TAG, "Status bar config saved: enabled=${config.enabled}, version=${config.version}")
-            true
+                .commit()
+            if (saved) {
+                ModuleFileLogger.i(TAG, "Status bar config saved: enabled=${config.enabled}, version=${config.version}")
+            }
+            saved
         }.getOrElse { throwable ->
             ModuleFileLogger.e(TAG, "Failed to write status bar config", throwable)
             false

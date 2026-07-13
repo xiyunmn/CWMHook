@@ -2,6 +2,7 @@ package com.xiyunmn.cwmhook.feature.rewardad
 
 import android.app.Application
 import android.content.Context
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import io.github.libxposed.api.XposedModule
@@ -10,19 +11,43 @@ object RewardAdSkipFeature {
     private const val TAG = "CWMHook.RewardAdSkip"
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
-        if (!isEnabled(classLoader)) {
+        val context = resolveHostContext(classLoader)
+        if (context == null) {
+            ModuleFileLogger.w(TAG, "Reward ad skip config unavailable; defaulting to disabled")
+            RewardAdProbe.configure(false)
+            RewardNetworkCapture.configure(false)
+            return
+        }
+        val rewardAdSkipEnabled = RewardAdSkipConfigStore.readLocal(context).enabled
+        val probeEnabled = DebugConfigStore.readLocal(context).detailedFileLogEnabled
+        RewardAdProbe.configure(probeEnabled)
+        RewardNetworkCapture.configure(probeEnabled)
+        if (!rewardAdSkipEnabled) {
             ModuleFileLogger.i(TAG, "Reward ad skip disabled by config")
             return
         }
         RewardMissionDialogHookInstaller.install(module, classLoader)
         RewardAdSkipHookInstaller.install(module, classLoader)
-        RewardAdProbe.install(module, classLoader)
-        RewardNetworkCapture.install(module, classLoader)
+        if (probeEnabled) {
+            RewardAdProbe.install(module, classLoader)
+            RewardNetworkCapture.install(module, classLoader)
+        }
         ModuleFileLogger.i(TAG, "Reward ad skip feature install requested")
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
-        if (!isEnabled(classLoader)) {
+        val context = resolveHostContext(classLoader)
+        if (context == null) {
+            ModuleFileLogger.w(TAG, "Reward ad skip config unavailable; retry skipped: $reason")
+            RewardAdProbe.configure(false)
+            RewardNetworkCapture.configure(false)
+            return
+        }
+        val rewardAdSkipEnabled = RewardAdSkipConfigStore.readLocal(context).enabled
+        val probeEnabled = DebugConfigStore.readLocal(context).detailedFileLogEnabled
+        RewardAdProbe.configure(probeEnabled)
+        RewardNetworkCapture.configure(probeEnabled)
+        if (!rewardAdSkipEnabled) {
             ModuleFileLogger.i(TAG, "Reward ad skip retry skipped by config: $reason")
             return
         }
@@ -31,21 +56,14 @@ object RewardAdSkipFeature {
         }
         RewardMissionDialogHookInstaller.install(module, classLoader)
         RewardAdSkipHookInstaller.install(module, classLoader)
-        RewardAdProbe.install(module, classLoader)
-        RewardNetworkCapture.install(module, classLoader)
+        if (probeEnabled) {
+            RewardAdProbe.install(module, classLoader)
+            RewardNetworkCapture.install(module, classLoader)
+        }
     }
 
     fun prepareForHotReload() {
         RewardAdSkipHookInstaller.clearRuntimeState()
-    }
-
-    private fun isEnabled(classLoader: ClassLoader): Boolean {
-        val context = resolveHostContext(classLoader)
-        if (context == null) {
-            ModuleFileLogger.w(TAG, "Reward ad skip config unavailable; defaulting to disabled")
-            return false
-        }
-        return RewardAdSkipConfigStore.readLocal(context).enabled
     }
 
     private fun resolveHostContext(classLoader: ClassLoader): Context? {

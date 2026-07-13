@@ -1,5 +1,6 @@
 package com.xiyunmn.cwmhook.ui.restart
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityOptions
 import android.app.PendingIntent
@@ -74,6 +75,7 @@ internal object SettingsHostRestarter {
         )
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun registerTrampolineReadyReceiver(activity: Activity, receiver: BroadcastReceiver) {
         val filter = IntentFilter(ACTION_TRAMPOLINE_READY)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

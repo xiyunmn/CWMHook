@@ -12,14 +12,15 @@ import java.lang.reflect.Method
 import org.json.JSONObject
 
 /**
- * Temporary diagnostic probes for reward-ad forge debugging.
+ * Diagnostic probes for reward-ad forge debugging.
  * Logs CreateAdTask / GetWeekboxTask outcomes and MissionActivity grant flags.
- * Remove once the settlement path is confirmed.
  */
 internal object RewardAdProbe {
     private const val TAG = "CWMHook.RewardAdProbe"
     private const val FAKE_WEEK_EXP_MARKER = "/data/local/tmp/cwmhook_fake_week_exp"
 
+    @Volatile
+    private var enabled = false
     @Volatile
     private var createAdProbed = false
     @Volatile
@@ -38,7 +39,17 @@ internal object RewardAdProbe {
     @Volatile
     private var lastCreateAdRequest: String = ""
 
+    fun configure(enabled: Boolean) {
+        this.enabled = enabled
+        if (!enabled) {
+            balanceBefore = null
+        }
+    }
+
     fun install(module: XposedModule, classLoader: ClassLoader) {
+        if (!enabled) {
+            return
+        }
         if (allProbesInstalled()) {
             return
         }
@@ -51,21 +62,30 @@ internal object RewardAdProbe {
     }
 
     fun forceRealAd(): Boolean {
+        if (!enabled) {
+            return false
+        }
         return runCatching {
             java.io.File("/data/local/tmp/cwmhook_force_real_ad").exists()
         }.getOrDefault(false)
     }
 
     private fun fakeWeekExp(): Boolean {
-        return runCatching { File(FAKE_WEEK_EXP_MARKER).exists() }.getOrDefault(false)
+        return enabled && runCatching { File(FAKE_WEEK_EXP_MARKER).exists() }.getOrDefault(false)
     }
 
     fun markMode(mode: String) {
         lastMode = mode
+        if (!enabled) {
+            return
+        }
         emit("compare-mode=$mode forceReal=${forceRealAd()}")
     }
 
     fun describeAdInfo(adInfo: Any?): String {
+        if (!enabled) {
+            return ""
+        }
         if (adInfo == null) {
             return "adInfo=null"
         }
@@ -81,6 +101,9 @@ internal object RewardAdProbe {
     }
 
     fun describeRewardInfo(rewardInfo: Any?): String {
+        if (!enabled) {
+            return ""
+        }
         if (rewardInfo == null) {
             return "rewardInfo=null"
         }
@@ -99,11 +122,17 @@ internal object RewardAdProbe {
         activity: Activity,
         details: String = "",
     ) {
+        if (!enabled) {
+            return
+        }
         val flags = readMissionFlags(activity)
         emit("synthetic:$stage activity=${activity.javaClass.simpleName} $flags ${details.trim()}".trim())
     }
 
     fun snapshotAssetsBeforePlay(activity: Activity) {
+        if (!enabled) {
+            return
+        }
         queryProps(activity, reason = "before-play") { balance, raw ->
             balanceBefore = balance
             emit("assets before-play: $balance raw=${trimForLog(raw)}")
@@ -114,6 +143,9 @@ internal object RewardAdProbe {
      * After CreateAd(228) claims success, refresh host props (subUrl=68) and compare balances.
      */
     fun refreshAssetsAfterGrant(activity: Activity) {
+        if (!enabled) {
+            return
+        }
         // Delay a bit so: 1) before-play snapshot can finish, 2) server-side grant can settle.
         val posted = ModuleViewTaskRegistry.post(activity.window.decorView, 1_200L) {
             if (!activity.isFinishing && !activity.isDestroyed) {
@@ -145,6 +177,9 @@ internal object RewardAdProbe {
         reason: String,
         onResult: (AssetBalance, String) -> Unit,
     ) {
+        if (!enabled) {
+            return
+        }
         val classLoader = activity.classLoader ?: return
         runCatching {
             val taskClass = Class.forName(CiweiMaoClasses.PSON_HOME_PROP_TASK, false, classLoader)
@@ -242,6 +277,9 @@ internal object RewardAdProbe {
     }
 
     private fun emit(message: String) {
+        if (!enabled) {
+            return
+        }
         // Temporary multi-sink for live diagnosis.
         Log.i(TAG, message)
         ModuleFileLogger.i(TAG, message)
@@ -267,6 +305,9 @@ internal object RewardAdProbe {
         val getData = findAnyMethod(taskClass, "getData")
 
         val executeHooked = XposedCompat.hookAfter(module, execute, "$TAG.CreateAdTask.execute") { chain ->
+            if (!enabled) {
+                return@hookAfter
+            }
             if (!isInstance(chain.thisObject, CiweiMaoClasses.CREATE_AD_TASK)) {
                 return@hookAfter
             }
@@ -277,6 +318,9 @@ internal object RewardAdProbe {
         var doHttpHooked = true
         if (doHttp != null) {
             doHttpHooked = XposedCompat.hookAfter(module, doHttp, "$TAG.CreateAdTask.doHttpRequest") { chain ->
+                if (!enabled) {
+                    return@hookAfter
+                }
                 if (!isInstance(chain.thisObject, CiweiMaoClasses.CREATE_AD_TASK)) {
                     return@hookAfter
                 }
@@ -288,6 +332,9 @@ internal object RewardAdProbe {
         var getDataHooked = true
         if (getData != null) {
             getDataHooked = XposedCompat.hookAfter(module, getData, "$TAG.CreateAdTask.getData") { chain ->
+                if (!enabled) {
+                    return@hookAfter
+                }
                 if (!isInstance(chain.thisObject, CiweiMaoClasses.CREATE_AD_TASK)) {
                     return@hookAfter
                 }
@@ -321,6 +368,9 @@ internal object RewardAdProbe {
         }
         val getData = findAnyMethod(taskClass, "getData")
         val executeHooked = XposedCompat.hookAfter(module, execute, "$TAG.GetWeekboxTask.execute") { chain ->
+            if (!enabled) {
+                return@hookAfter
+            }
             if (!isInstance(chain.thisObject, CiweiMaoClasses.GET_WEEKBOX_TASK)) {
                 return@hookAfter
             }
@@ -330,6 +380,9 @@ internal object RewardAdProbe {
         var getDataHooked = true
         if (getData != null) {
             getDataHooked = XposedCompat.hookAfter(module, getData, "$TAG.GetWeekboxTask.getData") { chain ->
+                if (!enabled) {
+                    return@hookAfter
+                }
                 if (!isInstance(chain.thisObject, CiweiMaoClasses.GET_WEEKBOX_TASK)) {
                     return@hookAfter
                 }
@@ -350,6 +403,9 @@ internal object RewardAdProbe {
         val taskClass = hostClass(CiweiMaoClasses.ALL_MISSION_LIST_TASK, classLoader) ?: return
         val getData = findAnyMethod(taskClass, "getData") ?: return
         val hooked = XposedCompat.interceptProtective(module, getData, "$TAG.AllMissionListTask.getData") { chain ->
+            if (!enabled) {
+                return@interceptProtective chain.proceed()
+            }
             if (!isInstance(chain.thisObject, CiweiMaoClasses.ALL_MISSION_LIST_TASK)) {
                 return@interceptProtective chain.proceed()
             }
@@ -436,6 +492,9 @@ internal object RewardAdProbe {
                 return@forEach
             }
             val hooked = XposedCompat.hookAfter(module, method, "$TAG.MissionActivity.$name") { chain ->
+                if (!enabled) {
+                    return@hookAfter
+                }
                 val activity = chain.thisObject as? Activity
                 val args = chain.getArgs().joinToString(",") { summarizeArg(it) }
                 val flags = activity?.let { readMissionFlags(it) }.orEmpty()
@@ -502,6 +561,9 @@ internal object RewardAdProbe {
             return
         }
         val hooked = XposedCompat.hookAfter(module, onReward, "$TAG.WMRewardAd.onVideoAdReward") { chain ->
+            if (!enabled) {
+                return@hookAfter
+            }
             val adInfo = chain.getArgs().getOrNull(0)
             val rewardInfo = chain.getArgs().getOrNull(1)
             emit(

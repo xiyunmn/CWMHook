@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.core.XposedCompat
@@ -46,6 +47,9 @@ object StartupNetworkTaskProbe {
     private var startupConfig = StartupOptimizeConfigStore.defaultConfig()
 
     @Volatile
+    private var probeEnabled = false
+
+    @Volatile
     private var lastConfigReadMs = 0L
 
     @Volatile
@@ -60,6 +64,9 @@ object StartupNetworkTaskProbe {
         startupConfig = runCatching {
             StartupOptimizeConfigStore.readLocal(context)
         }.getOrDefault(StartupOptimizeConfigStore.defaultConfig())
+        probeEnabled = runCatching {
+            DebugConfigStore.readLocal(context).detailedFileLogEnabled
+        }.getOrDefault(false)
     }
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
@@ -97,12 +104,13 @@ object StartupNetworkTaskProbe {
                 configure(context)
             }
             val config = startupConfig
-            if (!config.enabled) {
+            val shouldProbe = probeEnabled
+            if (!config.enabled && !shouldProbe) {
                 return@interceptProtective chain.proceed()
             }
 
             val startMs = SystemClock.elapsedRealtime()
-            val shouldLog = shouldLogTask(startMs)
+            val shouldLog = shouldProbe && shouldLogTask(startMs)
             val taskName = task.javaClass.name
             val caller = if (shouldLog) callerFromStack() else ""
 
@@ -121,7 +129,7 @@ object StartupNetworkTaskProbe {
                 return@interceptProtective result
             }
 
-            if (shouldDelayTask(config, taskName, startMs)) {
+            if (config.enabled && shouldDelayTask(config, taskName, startMs)) {
                 val args = (chain.getArg(0) as? Array<*>)?.copyOf() ?: emptyArray<Any?>()
                 delayedTaskStartMs[task] = startMs
                 mainHandler.postDelayed({
@@ -272,7 +280,7 @@ object StartupNetworkTaskProbe {
             if (context != null) {
                 configure(context)
             }
-            if (!startupConfig.enabled) {
+            if (!probeEnabled) {
                 return@interceptProtective chain.proceed()
             }
 

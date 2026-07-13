@@ -2,7 +2,7 @@ package com.xiyunmn.cwmhook.feature.startupprobe
 
 import android.content.Context
 import android.os.SystemClock
-import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
+import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 
 object StartupTimelineProbe {
@@ -32,7 +32,7 @@ object StartupTimelineProbe {
 
     fun configure(context: Context, reason: String) {
         val nextEnabled = runCatching {
-            StartupOptimizeConfigStore.readLocal(context).enabled
+            DebugConfigStore.readLocal(context).detailedFileLogEnabled
         }.getOrDefault(false)
         val changed = enabled != nextEnabled
         enabled = nextEnabled

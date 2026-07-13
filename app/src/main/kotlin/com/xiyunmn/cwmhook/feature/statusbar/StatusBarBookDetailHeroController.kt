@@ -9,7 +9,6 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
-import android.util.Log
 import android.view.View
 import android.view.Window
 import java.lang.ref.WeakReference
@@ -38,7 +37,6 @@ internal class StatusBarBookDetailHeroController(
     private var handoffGeneration = 0
 
     fun capture(window: Window, heroBackgroundView: View, scrollY: Int): Boolean {
-        probe("capture.enter w=${id(window)} viewBg=${heroBackgroundView.background?.javaClass?.name} scroll=$scrollY")
         val source = (heroBackgroundView.background as? BitmapDrawable)?.bitmap ?: return false
         if (source.isRecycled || source.width <= 0 || source.height <= 0) return false
         val decorView = window.decorView
@@ -78,19 +76,14 @@ internal class StatusBarBookDetailHeroController(
         if (!state.collapsed) {
             show(window, state)
         }
-        probe("capture.exit w=${id(window)} src=$identity collapsed=${state.collapsed} attached=${state.overlayAttached}")
         return !state.collapsed
     }
 
     fun updateScroll(window: Window, scrollY: Int): Boolean {
         val state = states.getOrPut(window) { HeroState() }
-        val wasCollapsed = state.collapsed
         val threshold = (BOOK_DETAIL_COLLAPSE_DP * window.decorView.resources.displayMetrics.density).roundToInt()
         state.scrollY = scrollY.coerceAtLeast(0)
         state.collapsed = scrollY >= threshold
-        if (wasCollapsed != state.collapsed || scrollY == 0) {
-            probe("scroll w=${id(window)} y=$scrollY collapsed=${state.collapsed} drawable=${state.overlayDrawable != null}")
-        }
         if (state.collapsed) {
             detach(window, state)
             return false
@@ -107,7 +100,6 @@ internal class StatusBarBookDetailHeroController(
 
     fun clear(window: Window) {
         val state = states.remove(window) ?: return
-        probe("clear w=${id(window)} collapsed=${state.collapsed} attached=${state.overlayAttached}")
         detach(window, state)
         val heroView = state.heroView?.get()
         if (heroView != null && heroView.background === state.heroDrawable) {
@@ -118,7 +110,6 @@ internal class StatusBarBookDetailHeroController(
     fun release(window: Window) {
         val state = states.remove(window) ?: return
         clearHandoff(window)
-        probe("release w=${id(window)} collapsed=${state.collapsed} attached=${state.overlayAttached}")
         // Do not mutate the dying Window's drawable tree here. Android can keep
         // rendering it for the activity exit transition after onDestroy; removing
         // the overlay or restoring the host background would expose an early
@@ -167,7 +158,6 @@ internal class StatusBarBookDetailHeroController(
         targetWindow.statusBarColor = Color.TRANSPARENT
         windowController.applyStatusBarIconAppearance(targetWindow, lightIcons)
         targetDecor.overlay.add(drawable)
-        probe("handoff.begin source=${id(sourceWindow)} target=${id(targetWindow)} gen=$generation collapsed=${sourceState.collapsed}")
         return generation
     }
 
@@ -184,7 +174,6 @@ internal class StatusBarBookDetailHeroController(
         if (handoff.generation != generation) return false
         handoffs.remove(window)
         window.decorView.overlay.remove(handoff.drawable)
-        probe("handoff.finish target=${id(window)} gen=$generation")
         return true
     }
 
@@ -254,19 +243,12 @@ internal class StatusBarBookDetailHeroController(
             invalidateSelf()
         }
 
-        @Suppress("DEPRECATION")
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
         override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
     }
 
     private companion object {
-        const val PROBE_TAG = "CWMHook.BookDetailProbe"
         const val BOOK_DETAIL_COLLAPSE_DP = 48f
         const val HERO_DARK_OVERLAY = 0x99000000.toInt()
-    }
-
-    private fun id(value: Any): String = Integer.toHexString(System.identityHashCode(value))
-
-    private fun probe(message: String) {
-        Log.i(PROBE_TAG, message)
     }
 }
