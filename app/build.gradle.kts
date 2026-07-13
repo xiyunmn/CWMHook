@@ -33,6 +33,10 @@ android {
     namespace = "com.xiyunmn.cwmhook"
     compileSdk = 37
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE").orNull
     val releaseStorePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
     val releaseKeyAlias = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull

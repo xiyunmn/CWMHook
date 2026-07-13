@@ -14,6 +14,8 @@ import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.debug.DebugConfig
 import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
+import com.xiyunmn.cwmhook.config.disclaimer.ModuleDisclaimerStore
+import com.xiyunmn.cwmhook.config.hidden.HiddenFeatureUnlockStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfig
@@ -31,10 +33,12 @@ import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
 import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsEntryResolver
 import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsHookInstaller
+import com.xiyunmn.cwmhook.runtime.XposedRuntimeGate
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
 import com.xiyunmn.cwmhook.ui.restart.SettingsHostRestarter
 import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPage
 import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPageWindow
+import com.xiyunmn.cwmhook.ui.settings.ModuleRiskDisclaimerDialog
 import io.github.libxposed.api.XposedModule
 import java.util.WeakHashMap
 
@@ -142,6 +146,17 @@ object ModuleSettingsFeature {
     }
 
     private fun showSettings(activity: Activity) {
+        if (!ModuleDisclaimerStore.isAccepted(activity)) {
+            val theme = PanelTheme.from(activity)
+            ModuleRiskDisclaimerDialog(activity, theme).show {
+                if (ModuleDisclaimerStore.setAccepted(activity)) {
+                    showSettings(activity)
+                } else {
+                    Toast.makeText(activity, "确认状态保存失败，请稍后重试", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
         ModuleSettingsPageWindow.show(
             activity = activity,
             createPage = ::createPage,
@@ -171,6 +186,8 @@ object ModuleSettingsFeature {
             initialRewardAdSkipConfig = RewardAdSkipConfigStore.readLocal(activity),
             initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
             initialDebugConfig = DebugConfigStore.readLocal(activity),
+            hiddenFeaturesUnlocked = HiddenFeatureUnlockStore.isUnlocked(activity),
+            chapterBackupUnlockAllowed = XposedRuntimeGate.isRootFramework(activity),
             restoreState = restoreState as? ModuleSettingsPage.RestoreState,
             onManualAutoSignIn = {
                 AutoSignInFeature.triggerManual(activity)
@@ -186,6 +203,9 @@ object ModuleSettingsFeature {
             },
             onExportCachedChapters = {
                 ChapterBackupFeature.exportCachedBooks(activity)
+            },
+            onUnlockHiddenFeatures = {
+                HiddenFeatureUnlockStore.setUnlocked(activity)
             },
             onSave = { statusBarConfig,
                     bookshelfConfig,

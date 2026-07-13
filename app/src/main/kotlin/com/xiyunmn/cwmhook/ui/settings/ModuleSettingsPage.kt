@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -13,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.xiyunmn.cwmhook.BuildConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfig
 import com.xiyunmn.cwmhook.config.autosignin.AutoSignInConfigStore
 import com.xiyunmn.cwmhook.config.bookshelf.BookshelfConfig
@@ -57,12 +59,15 @@ internal class ModuleSettingsPage(
     initialRewardAdSkipConfig: RewardAdSkipConfig,
     initialChapterBackupConfig: ChapterBackupConfig,
     initialDebugConfig: DebugConfig,
+    hiddenFeaturesUnlocked: Boolean,
+    private val chapterBackupUnlockAllowed: Boolean,
     restoreState: RestoreState? = null,
     private val onManualAutoSignIn: () -> Unit,
     private val onImportReaderFonts: () -> Unit,
     private val onChooseChapterBackupDirectory: () -> Unit,
     private val onClearChapterBackupDirectory: () -> Boolean,
     private val onExportCachedChapters: () -> Unit,
+    private val onUnlockHiddenFeatures: () -> Boolean,
     private val onSave: (
         StatusBarConfig,
         BookshelfConfig,
@@ -89,9 +94,11 @@ internal class ModuleSettingsPage(
     private var rewardAdSkipConfig = restoreState?.rewardAdSkipConfig ?: initialRewardAdSkipConfig
     private var chapterBackupConfig = restoreState?.chapterBackupConfig ?: initialChapterBackupConfig
     private var debugConfig = restoreState?.debugConfig ?: initialDebugConfig
+    private var hiddenFeaturesUnlocked = hiddenFeaturesUnlocked
     private var bottomTabState = BottomTabPanelState.from(bottomTabConfig)
     private var currentPage = restoreState?.pageName?.toPage() ?: Page.Overview
     private var actionRowIndex = 0
+    private var versionTapCount = 0
 
     private lateinit var titleText: TextView
     private lateinit var content: LinearLayout
@@ -306,20 +313,22 @@ internal class ModuleSettingsPage(
         )
 
         addSectionTitle("阅读")
-        addOverviewRow(
-            title = "个人章节导出",
-            subtitle = "导出免费和已购买章节",
-            enabled = chapterBackupConfig.enabled,
-            onToggle = {
-                chapterBackupConfig = chapterBackupConfig.copy(
-                    enabled = !chapterBackupConfig.enabled,
-                    version = ChapterBackupConfigStore.nextVersion(chapterBackupConfig),
-                )
-                render(Page.Overview)
-            },
-            onOpen = { render(Page.ChapterBackup) },
-            icon = IconType.CHAPTER_EXPORT,
-        )
+        if (showChapterBackupFeature()) {
+            addOverviewRow(
+                title = "个人章节导出",
+                subtitle = "导出免费和已购买章节",
+                enabled = chapterBackupConfig.enabled,
+                onToggle = {
+                    chapterBackupConfig = chapterBackupConfig.copy(
+                        enabled = !chapterBackupConfig.enabled,
+                        version = ChapterBackupConfigStore.nextVersion(chapterBackupConfig),
+                    )
+                    render(Page.Overview)
+                },
+                onOpen = { render(Page.ChapterBackup) },
+                icon = IconType.CHAPTER_EXPORT,
+            )
+        }
         addOverviewRow(
             title = "阅读页字体自定义",
             subtitle = "导入并管理本机字体",
@@ -381,21 +390,23 @@ internal class ModuleSettingsPage(
             icon = IconType.STARTUP_TAB,
         )
 
-        addSectionTitle("实验")
-        addOverviewRow(
-            title = "免广告得奖励",
-            subtitle = "任务中心每周宝箱跳过广告等待，保存重启后生效",
-            enabled = rewardAdSkipConfig.enabled,
-            onToggle = {
-                rewardAdSkipConfig = rewardAdSkipConfig.copy(
-                    enabled = !rewardAdSkipConfig.enabled,
-                    version = RewardAdSkipConfigStore.nextVersion(rewardAdSkipConfig),
-                )
-                render(Page.Overview)
-            },
-            onOpen = null,
-            icon = IconType.AD,
-        )
+        if (hiddenFeaturesUnlocked) {
+            addSectionTitle("实验")
+            addOverviewRow(
+                title = "免广告得奖励",
+                subtitle = "任务中心每周宝箱跳过广告等待，保存重启后生效",
+                enabled = rewardAdSkipConfig.enabled,
+                onToggle = {
+                    rewardAdSkipConfig = rewardAdSkipConfig.copy(
+                        enabled = !rewardAdSkipConfig.enabled,
+                        version = RewardAdSkipConfigStore.nextVersion(rewardAdSkipConfig),
+                    )
+                    render(Page.Overview)
+                },
+                onOpen = null,
+                icon = IconType.AD,
+            )
+        }
 
         addSectionTitle("调试")
         addOverviewRow(
@@ -424,6 +435,13 @@ internal class ModuleSettingsPage(
         }
 
         addSectionTitle("关于")
+        addActionRow(
+            title = "版本",
+            subtitle = versionSummary(),
+            icon = IconType.HELP,
+        ) {
+            handleVersionTap()
+        }
         addActionRow(
             title = "作者",
             subtitle = "xiyunmn",
@@ -948,6 +966,47 @@ internal class ModuleSettingsPage(
         }
     }
 
+    private fun versionSummary(): String {
+        return "刺猬猫阅读 ${hostVersionName()}\nCWMHook ${BuildConfig.VERSION_NAME}"
+    }
+
+    private fun showChapterBackupFeature(): Boolean {
+        return hiddenFeaturesUnlocked && chapterBackupUnlockAllowed
+    }
+
+    private fun handleVersionTap() {
+        if (hiddenFeaturesUnlocked) {
+            toast(versionSummary().replace('\n', ' '))
+            return
+        }
+        versionTapCount += 1
+        if (versionTapCount < HIDDEN_FEATURE_UNLOCK_TAPS) {
+            return
+        }
+        versionTapCount = 0
+        if (!onUnlockHiddenFeatures()) {
+            toast("隐藏功能解锁失败，请稍后重试")
+            return
+        }
+        hiddenFeaturesUnlocked = true
+        toast("隐藏功能已解锁")
+        render(Page.Overview)
+    }
+
+    private fun hostVersionName(): String {
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                activity.packageManager.getPackageInfo(
+                    activity.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                activity.packageManager.getPackageInfo(activity.packageName, 0)
+            }.versionName?.takeIf { it.isNotBlank() } ?: UNKNOWN_VERSION
+        }.getOrDefault(UNKNOWN_VERSION)
+    }
+
     data class RestoreState(
         val statusBarConfig: StatusBarConfig,
         val bookshelfConfig: BookshelfConfig,
@@ -974,6 +1033,8 @@ internal class ModuleSettingsPage(
 
     private companion object {
         const val CHAPTER_EXPORT_LOG_TAG = "CWMHook.ChapterExport"
+        private const val HIDDEN_FEATURE_UNLOCK_TAPS = 5
+        private const val UNKNOWN_VERSION = "未知"
         private const val AUTHOR_URL = "https://github.com/xiyunmn"
         private const val REPOSITORY_URL = "https://github.com/xiyunmn/CWMHook"
 

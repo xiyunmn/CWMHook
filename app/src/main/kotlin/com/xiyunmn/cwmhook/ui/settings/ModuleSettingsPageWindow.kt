@@ -2,8 +2,10 @@ package com.xiyunmn.cwmhook.ui.settings
 
 import android.app.Activity
 import android.app.Dialog
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -73,8 +75,15 @@ object ModuleSettingsPageWindow {
             }
         }
         val page = createPage(activity, overlay, theme, restoreState)
-        overlay.addView(page, frameMatch())
-        val holder = Holder(activity, dialog, overlay, createPage, onClosed)
+        installPageContent(overlay, page, theme, statusBarHeight(activity.window.decorView))
+        val holder = Holder(
+            activity,
+            dialog,
+            overlay,
+            page,
+            createPage,
+            onClosed,
+        )
         activeWindows[activity] = holder
         dialog.setContentView(overlay, frameMatch())
         dialog.setOnDismissListener {
@@ -176,7 +185,7 @@ object ModuleSettingsPageWindow {
 
     fun closeExisting(activity: Activity, reason: String, onClosed: (String) -> Unit): Boolean {
         val holder = activeWindows[activity]?.takeIf { it.dialog.isShowing } ?: return false
-        val page = holder.overlay.getChildAt(0) as? BackHandler
+        val page = holder.page as? BackHandler
         if (page?.handleBack() == true) {
             return true
         }
@@ -225,7 +234,7 @@ object ModuleSettingsPageWindow {
     }
 
     private fun handleBack(overlay: FrameLayout, onClosed: (String) -> Unit) {
-        val page = overlay.getChildAt(0) as? BackHandler
+        val page = pageFromOverlay(overlay) as? BackHandler
         if (page?.handleBack() == true) {
             return
         }
@@ -239,10 +248,31 @@ object ModuleSettingsPageWindow {
         holder.overlay.alpha = 1f
         holder.overlay.setBackgroundColor(theme.panelBackground)
         holder.overlay.removeAllViews()
-        holder.overlay.addView(holder.createPage(holder.activity, holder.overlay, theme, state), frameMatch())
+        holder.page = holder.createPage(holder.activity, holder.overlay, theme, state)
+        installPageContent(holder.overlay, holder.page, theme, statusBarHeight(holder.activity.window.decorView))
         configureWindow(holder.dialog.window, theme)
         holder.overlay.requestFocus()
         ModuleFileLogger.i(TAG, "Module settings page theme refreshed: reason=$reason activity=${holder.activity.javaClass.name}")
+    }
+
+    private fun installPageContent(overlay: FrameLayout, page: View, theme: PanelTheme, statusBarHeight: Int) {
+        if (statusBarHeight > 0) {
+            overlay.addView(
+                View(overlay.context).apply {
+                    tag = STATUS_BAR_FILL_TAG
+                    setBackgroundColor(theme.rowBackground)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, statusBarHeight, Gravity.TOP),
+            )
+        }
+        val pageParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        ).apply {
+            topMargin = statusBarHeight
+        }
+        overlay.addView(page, pageParams)
     }
 
     private fun configureWindow(window: Window?, theme: PanelTheme) {
@@ -252,11 +282,15 @@ object ModuleSettingsPageWindow {
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        window.statusBarColor = theme.rowBackground
-        window.navigationBarColor = theme.rowBackground
-        val appearance = systemBarAppearance(theme.rowBackground)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = theme.panelBackground
+        applyDecorStatusBarBackground(window, Color.TRANSPARENT)
+        val appearance = systemBarAppearance(
+            statusBarColor = theme.rowBackground,
+            navigationBarColor = theme.panelBackground,
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(true)
+            window.setDecorFitsSystemWindows(false)
             window.insetsController?.setSystemBarsAppearance(
                 appearance,
                 WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
@@ -264,27 +298,50 @@ object ModuleSettingsPageWindow {
             )
         } else {
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = legacySystemUiFlags(theme.rowBackground)
+            window.decorView.systemUiVisibility = legacySystemUiFlags(
+                statusBarColor = theme.rowBackground,
+                navigationBarColor = theme.panelBackground,
+            )
         }
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        ModuleViewTaskRegistry.post(window.decorView) {
+            applyDecorStatusBarBackground(window, Color.TRANSPARENT)
+        }
     }
 
-    private fun systemBarAppearance(color: Int): Int {
-        return if (isLightColor(color)) {
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-        } else {
-            0
+    private fun applyDecorStatusBarBackground(window: Window, color: Int) {
+        val id = window.decorView.resources.getIdentifier("statusBarBackground", "id", "android")
+        if (id == 0) {
+            return
         }
+        window.decorView.rootView.findViewById<View>(id)?.apply {
+            setBackgroundColor(color)
+            visibility = View.VISIBLE
+            alpha = 1f
+        }
+    }
+
+    private fun systemBarAppearance(statusBarColor: Int, navigationBarColor: Int): Int {
+        var appearance = 0
+        if (isLightColor(statusBarColor)) {
+            appearance = appearance or WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+        }
+        if (isLightColor(navigationBarColor)) {
+            appearance = appearance or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+        }
+        return appearance
     }
 
     @Suppress("DEPRECATION")
-    private fun legacySystemUiFlags(color: Int): Int {
-        return if (isLightColor(color)) {
-            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        } else {
-            0
+    private fun legacySystemUiFlags(statusBarColor: Int, navigationBarColor: Int): Int {
+        var flags = 0
+        if (isLightColor(statusBarColor)) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         }
+        if (isLightColor(navigationBarColor)) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        return flags
     }
 
     private fun isLightColor(color: Int): Boolean {
@@ -301,6 +358,28 @@ object ModuleSettingsPageWindow {
         )
     }
 
+    private fun pageFromOverlay(overlay: FrameLayout): View? {
+        for (index in overlay.childCount - 1 downTo 0) {
+            val child = overlay.getChildAt(index)
+            if (child.tag != STATUS_BAR_FILL_TAG) {
+                return child
+            }
+        }
+        return null
+    }
+
+    private fun statusBarHeight(view: View): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val inset = view.rootWindowInsets
+                ?.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars())
+                ?.top
+                ?: 0
+            if (inset > 0) return inset
+        }
+        val resourceId = view.resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) view.resources.getDimensionPixelSize(resourceId) else 0
+    }
+
     private fun Activity.isDestroyedCompat(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed
     }
@@ -309,6 +388,7 @@ object ModuleSettingsPageWindow {
         val activity: Activity,
         val dialog: Dialog,
         val overlay: FrameLayout,
+        var page: View,
         val createPage: (Activity, FrameLayout, PanelTheme, Any?) -> View,
         var onClosed: (String) -> Unit,
     ) {
@@ -316,7 +396,11 @@ object ModuleSettingsPageWindow {
         var closeReason: String = "dismiss"
 
         fun captureState(): Any? {
-            return (overlay.getChildAt(0) as? RestorablePage)?.captureRestoreState()
+            return (page as? RestorablePage)?.captureRestoreState()
+        }
+
+        fun isAttached(): Boolean {
+            return dialog.isShowing && overlay.isAttachedToWindow
         }
 
         fun detach() {
@@ -332,6 +416,8 @@ object ModuleSettingsPageWindow {
             closed = true
         }
     }
+
+    private const val STATUS_BAR_FILL_TAG = "cwmhook_settings_status_bar_fill"
 
     private data class PendingRestore(
         val activityClassName: String,
