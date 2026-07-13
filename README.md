@@ -1,37 +1,48 @@
 # CWMHook
 
-CWMHook 是面向刺猬猫阅读的 LSPosed/libxposed 模块。
+CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，基于现代 libxposed API 101 开发。
 
-- 目标包名：`com.kuangxiangciweimao.novel`
-- 已核对宿主版本：刺猬猫阅读 `2.9.362`
-- libxposed API：101
-- 模块入口：`com.xiyunmn.cwmhook.entry.CiweiMaoHookModule`
+当前主要适配：
+
+```text
+刺猬猫阅读 2.9.362
+com.kuangxiangciweimao.novel
+```
+
+## 安装
+
+1. 在支持 libxposed API 101 的框架中安装并启用模块。
+2. 将作用域设置为刺猬猫阅读。
+3. 强制停止并重新启动刺猬猫阅读。
+4. 长按书架页或阅读页的“更多”按钮进入模块设置。
+
+未 Root 设备可使用 NPatch 等支持 libxposed 的免 Root 框架，实际兼容性以所用框架为准。
+
+## 主要功能
+
+- 优化状态栏背景与日间、夜间页面适配。
+- 自定义底栏 Tab 的显示和顺序。
+- 隐藏书架继续阅读浮层。
+- 设置冷启动默认页面并提供可选启动优化。
+- 导入和管理阅读字体。
+- 自动签到与手动签到。
+- 将个人已拥有阅读权限或已缓存的章节导出为 TXT/EPUB。
+
+宿主版本更新后，部分功能可能因内部实现变化而失效。遇到异常时请先关闭对应功能，并提供宿主版本、模块版本、复现步骤和详细日志。
+
+## 版权与章节导出说明
+
+章节导出功能仅用于备份用户本人已合法取得阅读权限的内容，供个人临时收藏、离线阅读与数据迁移使用。模块不会绕过购买、订阅或章节权限校验，也不应被用于传播、共享、售卖或制作盗版资源。
+
+导出的内容版权归原作者及相关权利人所有。请在导出后 **24 小时内删除相关文件**；如需长期阅读，请通过官方渠道购买和使用正版内容。用户应自行确保使用行为符合当地法律法规、平台规则和版权许可，因违规使用产生的责任由使用者自行承担。
+
+## 免责声明
+
+本项目仅供学习、技术研究和个人设备功能增强使用，与刺猬猫阅读及其运营方无关。使用 Xposed 模块可能导致宿主异常、功能失效、数据损坏、账号风险或其它不可预期后果，请在使用前自行审查源码并做好数据备份。
 
 ## 构建
 
 ```powershell
+.\gradlew.bat verifyArchitecture
 .\gradlew.bat :app:assembleDebug
 ```
-
-Debug APK 输出到：
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-## 开发约束
-
-- 使用 Kotlin 与现代 libxposed API，不引入旧版 Xposed API 或旧入口。
-- Hook 安装统一通过 `core/XposedCompat.kt`。
-- `feature`、`ui`、`config`、`host` 等源码分层由 `verifyArchitecture` 检查。
-- 逆向工程材料、目标 APK、运行时 Dex、JADX/IDA 输出仅保存在本地 `Target_app/`，不属于源码仓库，也不会上传 GitHub。
-- 开发和回归说明见 [开发维护文档](docs/DEVELOPMENT.md)。
-
-## 验证
-
-```powershell
-.\gradlew.bat verifyArchitecture
-.\gradlew.bat :app:compileDebugKotlin :app:assembleDebug
-```
-
-发布或提交前还应在已支持的宿主版本上完成真机回归。
