@@ -6,6 +6,7 @@ import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.bookshelf.BookshelfFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
+import com.xiyunmn.cwmhook.feature.rewardad.RewardAdSkipFeature
 import com.xiyunmn.cwmhook.feature.startupopt.StartupOptimizeFeature
 import com.xiyunmn.cwmhook.feature.startuptab.StartupTabFeature
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
@@ -37,6 +38,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("AutoSignInFeature.install") { classLoader ->
                     AutoSignInFeature.install(module, classLoader)
+                },
+                HookInstallEntry("RewardAdSkipFeature.install") { classLoader ->
+                    RewardAdSkipFeature.install(module, classLoader)
                 },
                 HookInstallEntry("ChapterBackupFeature.install") { classLoader ->
                     ChapterBackupFeature.install(module, classLoader)
@@ -77,6 +81,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("AutoSignInFeature.retryDeferredHooks") { classLoader ->
                     AutoSignInFeature.retryDeferredHooks(module, classLoader, reason)
+                },
+                HookInstallEntry("RewardAdSkipFeature.retryDeferredHooks") { classLoader ->
+                    RewardAdSkipFeature.retryDeferredHooks(module, classLoader, reason)
                 },
                 HookInstallEntry("ChapterBackupFeature.retryDeferredHooks") { classLoader ->
                     ChapterBackupFeature.retryDeferredHooks(module, classLoader, reason)

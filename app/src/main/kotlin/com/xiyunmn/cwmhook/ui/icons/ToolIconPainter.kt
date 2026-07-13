@@ -39,6 +39,18 @@ internal object ToolIconPainter {
         canvas.drawPath(path, paint)
     }
 
+    fun drawRewardAd(canvas: Canvas, paint: Paint, rect: RectF, cx: Float, cy: Float, size: Float) {
+        rect.set(cx - size * 0.68f, cy - size * 0.42f, cx + size * 0.68f, cy + size * 0.42f)
+        canvas.drawRoundRect(rect, size * 0.12f, size * 0.12f, paint)
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = size * 0.44f
+        canvas.drawText("AD", cx, cy + size * 0.14f, paint)
+        paint.style = Paint.Style.STROKE
+        canvas.drawLine(cx - size * 0.74f, cy + size * 0.54f, cx + size * 0.74f, cy - size * 0.54f, paint)
+    }
+
     fun drawDownload(canvas: Canvas, paint: Paint, rect: RectF, cx: Float, cy: Float, size: Float) {
         canvas.drawLine(cx, cy - size * 0.62f, cx, cy + size * 0.12f, paint)
         canvas.drawLine(cx - size * 0.3f, cy - size * 0.15f, cx, cy + size * 0.15f, paint)

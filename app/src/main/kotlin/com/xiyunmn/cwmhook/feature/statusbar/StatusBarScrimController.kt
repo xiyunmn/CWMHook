@@ -51,7 +51,7 @@ internal class StatusBarScrimController(
         find(contentRoot)?.visibility = View.GONE
     }
 
-    fun setOverlay(contentRoot: ViewGroup, visible: Boolean, dimFraction: Float = 0.45f): Int? {
+    fun setOverlay(contentRoot: ViewGroup, visible: Boolean, dimFraction: Float = 0.50f): Int? {
         val scrim = find(contentRoot) ?: return null
         if (visible) {
             overlayFractions[scrim] = dimFraction.coerceIn(0f, 1f)

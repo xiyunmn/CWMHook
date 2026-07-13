@@ -1,8 +1,6 @@
 package com.xiyunmn.cwmhook.app
 
 import android.app.Activity
-import android.content.Intent
-import android.os.Process
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -18,6 +16,8 @@ import com.xiyunmn.cwmhook.config.debug.DebugConfig
 import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfig
+import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfigStore
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
@@ -25,15 +25,14 @@ import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfigStore
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfig
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
-import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
 import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsEntryResolver
 import com.xiyunmn.cwmhook.feature.settings.ModuleSettingsHookInstaller
-import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
 import com.xiyunmn.cwmhook.ui.common.PanelTheme
+import com.xiyunmn.cwmhook.ui.restart.SettingsHostRestarter
 import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPage
 import com.xiyunmn.cwmhook.ui.settings.ModuleSettingsPageWindow
 import io.github.libxposed.api.XposedModule
@@ -103,7 +102,6 @@ object ModuleSettingsFeature {
 
     private fun onMainFrameActivityDestroy(activity: Activity, reason: String) {
         ModuleSettingsPageWindow.handleHostActivityDestroy(activity, reason)
-        setStatusBarOverlayVisible(activity, false)
     }
 
     private fun onHostThemeChanged(reason: String) {
@@ -116,11 +114,9 @@ object ModuleSettingsFeature {
             createPage = ::createPage,
             reason = reason,
             onShown = {
-                setStatusBarOverlayVisible(it, true)
                 ModuleFileLogger.i(TAG, "Module settings page restored/shown: ${it.javaClass.name}")
             },
             onReused = {
-                setStatusBarOverlayVisible(it, true)
                 ModuleFileLogger.i(TAG, "Module settings page restore reused: ${it.javaClass.name}")
             },
             onClosed = { closeReason -> onSettingsClosed(activity, closeReason) },
@@ -151,11 +147,9 @@ object ModuleSettingsFeature {
             createPage = ::createPage,
             restoreState = null,
             onShown = {
-                setStatusBarOverlayVisible(it, true)
                 ModuleFileLogger.i(TAG, "Module settings page shown: ${it.javaClass.name}")
             },
             onReused = {
-                setStatusBarOverlayVisible(it, true)
                 ModuleFileLogger.i(TAG, "Module settings page reused: ${it.javaClass.name}")
             },
             onClosed = { reason -> onSettingsClosed(activity, reason) },
@@ -174,6 +168,7 @@ object ModuleSettingsFeature {
             initialAutoSignInConfig = AutoSignInConfigStore.readLocal(activity),
             initialStartupOptimizeConfig = StartupOptimizeConfigStore.readLocal(activity),
             initialStartupTabConfig = StartupTabConfigStore.readLocal(activity),
+            initialRewardAdSkipConfig = RewardAdSkipConfigStore.readLocal(activity),
             initialChapterBackupConfig = ChapterBackupConfigStore.readLocal(activity),
             initialDebugConfig = DebugConfigStore.readLocal(activity),
             restoreState = restoreState as? ModuleSettingsPage.RestoreState,
@@ -199,8 +194,10 @@ object ModuleSettingsFeature {
                     autoSignInConfig,
                     startupOptimizeConfig,
                     startupTabConfig,
+                    rewardAdSkipConfig,
                     chapterBackupConfig,
-                    debugConfig ->
+                    debugConfig,
+                    showToast ->
                 saveAllConfigs(
                     activity,
                     statusBarConfig,
@@ -210,8 +207,10 @@ object ModuleSettingsFeature {
                     autoSignInConfig,
                     startupOptimizeConfig,
                     startupTabConfig,
+                    rewardAdSkipConfig,
                     chapterBackupConfig,
                     debugConfig,
+                    showToast,
                 )
             },
             onRestartHost = {
@@ -232,8 +231,10 @@ object ModuleSettingsFeature {
         autoSignInConfig: AutoSignInConfig,
         startupOptimizeConfig: StartupOptimizeConfig,
         startupTabConfig: StartupTabConfig,
+        rewardAdSkipConfig: RewardAdSkipConfig,
         chapterBackupConfig: ChapterBackupConfig,
         debugConfig: DebugConfig,
+        showToast: Boolean = true,
     ) {
         val debugSaved = DebugConfigStore.writeLocal(activity, debugConfig)
         if (debugSaved) {
@@ -246,6 +247,7 @@ object ModuleSettingsFeature {
         val autoSignInSaved = AutoSignInConfigStore.writeLocal(activity, autoSignInConfig)
         val startupOptimizeSaved = StartupOptimizeConfigStore.writeLocal(activity, startupOptimizeConfig)
         val startupTabSaved = StartupTabConfigStore.writeLocal(activity, startupTabConfig)
+        val rewardAdSkipSaved = RewardAdSkipConfigStore.writeLocal(activity, rewardAdSkipConfig)
         val chapterBackupSaved = ChapterBackupConfigStore.writeLocal(
             activity,
             chapterBackupConfig,
@@ -261,6 +263,7 @@ object ModuleSettingsFeature {
             autoSignInSaved &&
             startupOptimizeSaved &&
             startupTabSaved &&
+            rewardAdSkipSaved &&
             chapterBackupSaved &&
             debugSaved
         ) {
@@ -268,21 +271,14 @@ object ModuleSettingsFeature {
         } else {
             "部分配置保存失败，请查看日志"
         }
-        Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+        if (showToast) {
+            Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun restartHost(activity: Activity) {
-        val launchIntent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
-        if (launchIntent == null) {
-            Toast.makeText(activity, "无法获取宿主启动入口，请手动重启", Toast.LENGTH_LONG).show()
-            ModuleFileLogger.w(TAG, "Host restart requested but launch intent is null")
-            return
-        }
-        ModuleFileLogger.i(TAG, "Restart host requested from module settings")
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        activity.startActivity(launchIntent)
-        ModuleViewTaskRegistry.post(activity.window.decorView, 180L) {
-            Process.killProcess(Process.myPid())
+        SettingsHostRestarter.restartHost(activity) {
+            ModuleFileLogger.i(TAG, "Restart host requested from module settings")
         }
     }
 
@@ -294,18 +290,10 @@ object ModuleSettingsFeature {
         val closed = ModuleSettingsPageWindow.closeExisting(activity, reason) { closeReason ->
             onSettingsClosed(activity, closeReason)
         }
-        if (!closed) {
-            setStatusBarOverlayVisible(activity, false)
-        }
         return closed
     }
 
     private fun onSettingsClosed(activity: Activity, reason: String) {
-        setStatusBarOverlayVisible(activity, false)
         logSettingsClosed(reason)
-    }
-
-    private fun setStatusBarOverlayVisible(activity: Activity, visible: Boolean) {
-        ImmersiveStatusBarFeature.setTransientOverlayVisible(activity, visible)
     }
 }

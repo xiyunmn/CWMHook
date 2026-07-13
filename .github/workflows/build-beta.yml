@@ -28,6 +28,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Read module version
+        id: version
+        shell: bash
+        run: |
+          version="$(grep '^version=' app/src/main/resources/META-INF/xposed/module.prop | cut -d= -f2)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - name: Decode signing keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > key.jks
 
@@ -45,6 +52,6 @@ jobs:
       - name: Upload Beta APK
         uses: actions/upload-artifact@v4
         with:
-          name: CWMHook-beta
-          path: app/build/outputs/apk/beta/*.apk
+          name: CWMHook-v${{ steps.version.outputs.version }}-beta
+          path: app/build/outputs/apk/beta/CWMHook-v${{ steps.version.outputs.version }}-beta.apk
           retention-days: 90

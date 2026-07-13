@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.CWMHook.RestartTrampoline" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
     <style name="CwmChapterPageWindowAnimation">
         <item name="android:windowEnterAnimation">@anim/cwm_chapter_left_in</item>
         <item name="android:windowExitAnimation">@anim/cwm_chapter_right_out</item>

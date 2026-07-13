@@ -1,7 +1,9 @@
 package com.xiyunmn.cwmhook.ui.settings
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Typeface
+import android.net.Uri
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -23,6 +25,8 @@ import com.xiyunmn.cwmhook.config.debug.DebugConfig
 import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
+import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfig
+import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfigStore
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.config.startuptab.StartupTabConfig
@@ -50,6 +54,7 @@ internal class ModuleSettingsPage(
     initialAutoSignInConfig: AutoSignInConfig,
     initialStartupOptimizeConfig: StartupOptimizeConfig,
     initialStartupTabConfig: StartupTabConfig,
+    initialRewardAdSkipConfig: RewardAdSkipConfig,
     initialChapterBackupConfig: ChapterBackupConfig,
     initialDebugConfig: DebugConfig,
     restoreState: RestoreState? = null,
@@ -66,8 +71,10 @@ internal class ModuleSettingsPage(
         AutoSignInConfig,
         StartupOptimizeConfig,
         StartupTabConfig,
+        RewardAdSkipConfig,
         ChapterBackupConfig,
         DebugConfig,
+        Boolean,
     ) -> Unit,
     private val onRestartHost: () -> Unit,
     private val onClose: (String) -> Unit,
@@ -79,6 +86,7 @@ internal class ModuleSettingsPage(
     private var autoSignInConfig = restoreState?.autoSignInConfig ?: initialAutoSignInConfig
     private var startupOptimizeConfig = restoreState?.startupOptimizeConfig ?: initialStartupOptimizeConfig
     private var startupTabConfig = restoreState?.startupTabConfig ?: initialStartupTabConfig
+    private var rewardAdSkipConfig = restoreState?.rewardAdSkipConfig ?: initialRewardAdSkipConfig
     private var chapterBackupConfig = restoreState?.chapterBackupConfig ?: initialChapterBackupConfig
     private var debugConfig = restoreState?.debugConfig ?: initialDebugConfig
     private var bottomTabState = BottomTabPanelState.from(bottomTabConfig)
@@ -120,6 +128,7 @@ internal class ModuleSettingsPage(
             autoSignInConfig = autoSignInConfig,
             startupOptimizeConfig = startupOptimizeConfig,
             startupTabConfig = startupTabConfig,
+            rewardAdSkipConfig = rewardAdSkipConfig,
             chapterBackupConfig = chapterBackupConfig,
             debugConfig = debugConfig,
             pageName = currentPage.name,
@@ -372,6 +381,22 @@ internal class ModuleSettingsPage(
             icon = IconType.STARTUP_TAB,
         )
 
+        addSectionTitle("实验")
+        addOverviewRow(
+            title = "免广告得奖励",
+            subtitle = "任务中心每周宝箱跳过广告等待，保存重启后生效",
+            enabled = rewardAdSkipConfig.enabled,
+            onToggle = {
+                rewardAdSkipConfig = rewardAdSkipConfig.copy(
+                    enabled = !rewardAdSkipConfig.enabled,
+                    version = RewardAdSkipConfigStore.nextVersion(rewardAdSkipConfig),
+                )
+                render(Page.Overview)
+            },
+            onOpen = null,
+            icon = IconType.AD,
+        )
+
         addSectionTitle("调试")
         addOverviewRow(
             title = "启用详细文件日志",
@@ -386,6 +411,8 @@ internal class ModuleSettingsPage(
             },
             onOpen = null,
             icon = IconType.HELP,
+            heightDp = 88,
+            subtitleMaxLines = 3,
         )
         addActionRow(
             title = "清理文件日志",
@@ -394,6 +421,22 @@ internal class ModuleSettingsPage(
         ) {
             val cleared = ModuleFileLogger.clear(activity)
             toast(if (cleared) "文件日志已清理" else "文件日志清理失败，请稍后重试")
+        }
+
+        addSectionTitle("关于")
+        addActionRow(
+            title = "作者",
+            subtitle = "xiyunmn",
+            icon = IconType.USER,
+        ) {
+            openExternalUrl(AUTHOR_URL)
+        }
+        addActionRow(
+            title = "仓库",
+            subtitle = REPOSITORY_URL,
+            icon = IconType.FOLDER_OPEN,
+        ) {
+            openExternalUrl(REPOSITORY_URL)
         }
     }
 
@@ -630,8 +673,21 @@ internal class ModuleSettingsPage(
         icon: IconType? = null,
         extraActionIcon: IconType? = null,
         onExtraAction: (() -> Unit)? = null,
+        heightDp: Int? = null,
+        subtitleMaxLines: Int = 2,
     ) {
-        rows.addOverviewRow(title, subtitle, enabled, onToggle, onOpen, icon, extraActionIcon, onExtraAction)
+        rows.addOverviewRow(
+            title,
+            subtitle,
+            enabled,
+            onToggle,
+            onOpen,
+            icon,
+            extraActionIcon,
+            onExtraAction,
+            heightDp,
+            subtitleMaxLines,
+        )
     }
 
     private fun addActionRow(title: String, subtitle: String, icon: IconType? = null, onClick: () -> Unit) {
@@ -679,8 +735,10 @@ internal class ModuleSettingsPage(
             autoSignInConfig,
             startupOptimizeConfig,
             startupTabConfig,
+            rewardAdSkipConfig,
             chapterBackupConfig,
             debugConfig,
+            true,
         )
         onClose("save")
     }
@@ -695,8 +753,10 @@ internal class ModuleSettingsPage(
             autoSignInConfig,
             startupOptimizeConfig,
             startupTabConfig,
+            rewardAdSkipConfig,
             chapterBackupConfig,
             debugConfig,
+            false,
         )
         onClose("save-restart")
         ModuleViewTaskRegistry.post(activity.window.decorView, 250L) { onRestartHost() }
@@ -721,6 +781,7 @@ internal class ModuleSettingsPage(
         autoSignInConfig = AutoSignInConfigStore.defaultConfig()
         startupOptimizeConfig = StartupOptimizeConfigStore.defaultConfig()
         startupTabConfig = StartupTabConfigStore.defaultConfig()
+        rewardAdSkipConfig = RewardAdSkipConfigStore.defaultConfig()
         chapterBackupConfig = ChapterBackupConfigStore.defaultConfig()
         debugConfig = DebugConfigStore.defaultConfig()
         toast("已恢复默认草稿，保存后生效")
@@ -879,6 +940,14 @@ internal class ModuleSettingsPage(
         Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
     }
 
+    private fun openExternalUrl(url: String) {
+        runCatching {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            toast("无法打开链接")
+        }
+    }
+
     data class RestoreState(
         val statusBarConfig: StatusBarConfig,
         val bookshelfConfig: BookshelfConfig,
@@ -887,6 +956,7 @@ internal class ModuleSettingsPage(
         val autoSignInConfig: AutoSignInConfig,
         val startupOptimizeConfig: StartupOptimizeConfig,
         val startupTabConfig: StartupTabConfig,
+        val rewardAdSkipConfig: RewardAdSkipConfig,
         val chapterBackupConfig: ChapterBackupConfig,
         val debugConfig: DebugConfig,
         val pageName: String,
@@ -904,6 +974,8 @@ internal class ModuleSettingsPage(
 
     private companion object {
         const val CHAPTER_EXPORT_LOG_TAG = "CWMHook.ChapterExport"
+        private const val AUTHOR_URL = "https://github.com/xiyunmn"
+        private const val REPOSITORY_URL = "https://github.com/xiyunmn/CWMHook"
 
         private fun String.toPage(): Page {
             return runCatching { Page.valueOf(this) }.getOrDefault(Page.Overview)

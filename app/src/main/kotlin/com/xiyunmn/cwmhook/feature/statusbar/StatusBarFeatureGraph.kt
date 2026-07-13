@@ -2,13 +2,16 @@ package com.xiyunmn.cwmhook.feature.statusbar
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Color
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import com.xiyunmn.cwmhook.config.statusbar.StatusBarConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
 import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import io.github.libxposed.api.XposedModule
+import java.util.WeakHashMap
 
 internal class StatusBarFeatureGraph(
     private val config: StatusBarFeatureConfig,
@@ -40,6 +43,7 @@ internal class StatusBarFeatureGraph(
     private val cacheLock = Any()
     private val applying = ThreadLocal.withInitial { false }
     private var persistentCache: StatusBarColorCache? = null
+    private val transientOverlayBaseColors = WeakHashMap<Window, Int>()
 
     private val sceneResolver = StatusBarSceneResolver(
         sceneRules,
@@ -101,6 +105,7 @@ internal class StatusBarFeatureGraph(
         scheduleKnownWindows = scheduler::scheduleKnownWindows,
         applyFragmentWindow = scheduler::applyFragmentWindow,
         isReaderActivity = sceneRules::isReaderActivity,
+        setTransientOverlayVisible = ::setTransientOverlayVisible,
         logTag = config.logTag,
     )
 
@@ -163,8 +168,9 @@ internal class StatusBarFeatureGraph(
         windowRegistry.state(activity.window).bumpGeneration("transientOverlay:$visible")
         val contentRoot = activity.window.findViewById<ViewGroup>(android.R.id.content)
         val overlayColor = contentRoot?.let { scrimController.setOverlay(it, visible) }
-        if (overlayColor != null) {
-            windowController.applySystemBarAppearance(activity.window, activity.window.decorView, overlayColor)
+        val statusBarOverlayColor = overlayColor ?: statusBarOverlayColor(activity.window, visible)
+        if (statusBarOverlayColor != null) {
+            windowController.applySystemBarAppearance(activity.window, activity.window.decorView, statusBarOverlayColor)
         }
         if (!visible) {
             ModuleViewTaskRegistry.post(activity.window.decorView) {
@@ -180,6 +186,28 @@ internal class StatusBarFeatureGraph(
         )
     }
 
+    private fun statusBarOverlayColor(window: Window, visible: Boolean, dimFraction: Float = 0.50f): Int? {
+        return synchronized(transientOverlayBaseColors) {
+            if (visible) {
+                val base = transientOverlayBaseColors.getOrPut(window) { window.statusBarColor }
+                darken(base, dimFraction)
+            } else {
+                transientOverlayBaseColors.remove(window)
+            }
+        }
+    }
+
+    private fun darken(color: Int, fraction: Float): Int {
+        if (fraction <= 0f) return color
+        val factor = 1f - fraction.coerceIn(0f, 1f)
+        return Color.argb(
+            Color.alpha(color),
+            (Color.red(color) * factor).toInt(),
+            (Color.green(color) * factor).toInt(),
+            (Color.blue(color) * factor).toInt(),
+        )
+    }
+
     fun prepareForHotReload(activities: List<Activity>) {
         val windows = activities.map { it.window }
         runtimeApplier.prepareForHotReload(windows)
@@ -187,6 +215,9 @@ internal class StatusBarFeatureGraph(
         paddingController.restoreAllForHotReload()
         scrimController.clearForHotReload()
         transientOverlayRegistry.clearForHotReload()
+        synchronized(transientOverlayBaseColors) {
+            transientOverlayBaseColors.clear()
+        }
         windowRegistry.clearForHotReload()
     }
 }

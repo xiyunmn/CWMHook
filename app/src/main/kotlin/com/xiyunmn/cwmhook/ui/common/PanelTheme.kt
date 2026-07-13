@@ -46,6 +46,7 @@ data class PanelTheme(
             IconType.RESET,
             IconType.DELETE,
             IconType.POWER,
+            IconType.USER,
             IconType.EYE_OFF,
             IconType.HELP -> accent
             else -> subIcon

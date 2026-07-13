@@ -11,6 +11,7 @@ import com.xiyunmn.cwmhook.core.runtime.ModuleOwnedUiCleaner
 import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
+import com.xiyunmn.cwmhook.feature.rewardad.RewardAdSkipFeature
 import com.xiyunmn.cwmhook.feature.startupprobe.StartupNetworkTaskProbe
 import com.xiyunmn.cwmhook.feature.statusbar.ImmersiveStatusBarFeature
 import java.util.concurrent.CountDownLatch
@@ -38,6 +39,7 @@ object HotReloadCoordinator {
             check(ChapterBackupFeature.canHotReload())
             check(AutoSignInFeature.prepareForHotReload())
             check(ChapterBackupFeature.prepareForHotReload())
+            RewardAdSkipFeature.prepareForHotReload()
             ModuleViewTaskRegistry.cancelAll()
             ModuleSettingsFeature.prepareForHotReload()
             val activities = HostProcessInspector.activities()

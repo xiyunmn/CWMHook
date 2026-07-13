@@ -26,7 +26,7 @@ internal object IconPainter {
             IconType.MORE,
             -> ToolIconPainter.drawGrid(canvas, paint, rect, cx, cy, size)
             IconType.UI -> ToolIconPainter.drawMonitor(canvas, paint, rect, cx, cy, size)
-            IconType.AD -> ToolIconPainter.drawShield(canvas, paint, cx, cy, size)
+            IconType.AD -> ToolIconPainter.drawRewardAd(canvas, paint, rect, cx, cy, size)
             IconType.DOWNLOAD -> ToolIconPainter.drawDownload(canvas, paint, rect, cx, cy, size)
             IconType.STATUS_BAR -> ToolIconPainter.drawStatusBar(canvas, paint, rect, cx, cy, size)
             IconType.BOTTOM_TAB -> ToolIconPainter.drawBottomTab(canvas, paint, rect, cx, cy, size)

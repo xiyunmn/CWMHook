@@ -2,6 +2,7 @@ id=com.xiyunmn.cwmhook
 name=CWMHook
 author=xiyunmn
 description=刺猬猫阅读增强 Xposed 模块 - 界面优化、字体管理、自动签到
+version=1.0.0
 minApiVersion=102
 targetApiVersion=102
 staticScope=true

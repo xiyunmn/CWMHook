@@ -30,9 +30,11 @@ internal class ModuleSettingsRows(
         icon: IconType? = null,
         extraActionIcon: IconType? = null,
         onExtraAction: (() -> Unit)? = null,
+        heightDp: Int? = null,
+        subtitleMaxLines: Int = 2,
     ) {
         content.addView(
-            createBaseRow(title, subtitle, icon).apply {
+            createBaseRow(title, subtitle, icon, subtitleMaxLines = subtitleMaxLines).apply {
                 setOnClickListener {
                     performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                     when {
@@ -48,7 +50,7 @@ internal class ModuleSettingsRows(
                     hasDisclosure = onOpen != null,
                 )
             },
-            rowParams(subtitle.isNotBlank()),
+            rowParams(subtitle.isNotBlank(), heightDp),
         )
         content.addView(separator(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
     }
@@ -115,6 +117,7 @@ internal class ModuleSettingsRows(
         subtitle: String,
         icon: IconType? = null,
         leadingIcon: View? = null,
+        subtitleMaxLines: Int = 2,
     ): LinearLayout {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -162,7 +165,7 @@ internal class ModuleSettingsRows(
                         text = subtitle
                         textSize = 11f
                         setTextColor(theme.subText)
-                        maxLines = 2
+                        maxLines = subtitleMaxLines
                         ellipsize = TextUtils.TruncateAt.END
                         includeFontPadding = false
                         setLineSpacing(0f, 1.05f)
@@ -240,8 +243,8 @@ internal class ModuleSettingsRows(
         )
     }
 
-    private fun rowParams(hasSubtitle: Boolean = true): LinearLayout.LayoutParams {
-        val height = if (hasSubtitle) 74 else 62
+    private fun rowParams(hasSubtitle: Boolean = true, heightDp: Int? = null): LinearLayout.LayoutParams {
+        val height = heightDp ?: if (hasSubtitle) 74 else 62
         return LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, height))
     }
 

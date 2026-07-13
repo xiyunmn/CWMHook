@@ -23,6 +23,7 @@ internal class StatusBarHookInstaller(
     private val scheduleKnownWindows: (String) -> Unit,
     private val applyFragmentWindow: (Any?, Method, Method?, String) -> Unit,
     private val isReaderActivity: (String) -> Boolean,
+    private val setTransientOverlayVisible: (Activity, Boolean) -> Unit,
     private val logTag: String,
 ) {
     private val activityLifecycleHooks = StatusBarActivityLifecycleHookInstaller(
@@ -54,10 +55,15 @@ internal class StatusBarHookInstaller(
         logTag = logTag,
     )
     private val mainTabHooks = StatusBarMainTabHookInstaller(windowRegistry, applyWindow, logTag)
+    private val bookshelfBookPopupHooks = StatusBarBookshelfBookPopupHookInstaller(
+        setTransientOverlayVisible = setTransientOverlayVisible,
+        logTag = logTag,
+    )
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
         activityLifecycleHooks.install(module)
         mainTabHooks.install(module)
+        bookshelfBookPopupHooks.install(module, classLoader)
         deferredHostHooks.install(module, classLoader)
         // Host dialogs and readers also mutate system UI. Re-applying from a
         // global Window/View hook causes cross-window refresh loops, so page
@@ -65,6 +71,7 @@ internal class StatusBarHookInstaller(
     }
 
     fun retryDeferredHooks(module: XposedModule, classLoader: ClassLoader, reason: String) {
+        bookshelfBookPopupHooks.retryDeferredHooks(module, classLoader, reason)
         deferredHostHooks.retryDeferredHooks(module, classLoader, reason)
     }
 }

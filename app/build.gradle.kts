@@ -133,6 +133,27 @@ androidComponents {
     }
 }
 
+val validateModulePropVersion = tasks.register("validateModulePropVersion") {
+    val modulePropFile = layout.projectDirectory.file("src/main/resources/META-INF/xposed/module.prop")
+    inputs.file(modulePropFile)
+
+    doLast {
+        val actual = modulePropFile.asFile.readLines()
+            .firstOrNull { it.trim().startsWith("version=") }
+            ?.substringAfter("=")
+            ?.trim()
+        if (actual != baseVersionName) {
+            throw GradleException(
+                "module.prop version must match baseVersionName. expected=$baseVersionName actual=$actual",
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(validateModulePropVersion)
+}
+
 listOf("debug", "beta", "release").forEach { buildType ->
     val capitalizedBuildType = buildType.replaceFirstChar { it.uppercase() }
     val apkFileName = apkFileNameForBuildType(buildType)

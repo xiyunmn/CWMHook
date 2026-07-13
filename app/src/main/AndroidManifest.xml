@@ -6,5 +6,16 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
-        android:supportsRtl="true" />
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".ui.restart.HostRestartTrampolineActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:finishOnTaskLaunch="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity="com.xiyunmn.cwmhook.restart"
+            android:theme="@style/Theme.CWMHook.RestartTrampoline" />
+    </application>
 </manifest>
