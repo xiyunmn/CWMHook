@@ -97,10 +97,16 @@ internal class ModuleSettingsPage(
     private var hiddenFeaturesUnlocked = hiddenFeaturesUnlocked
     private var bottomTabState = BottomTabPanelState.from(bottomTabConfig)
     private var currentPage = restoreState?.pageName?.toPage() ?: Page.Overview
+    private val pageScrollY = restoreState?.scrollPositions
+        ?.mapKeys { it.key.toPage() }
+        ?.toMutableMap()
+        ?: mutableMapOf()
     private var actionRowIndex = 0
     private var versionTapCount = 0
+    private var hasRenderedPage = false
 
     private lateinit var titleText: TextView
+    private lateinit var scrollView: ScrollView
     private lateinit var content: LinearLayout
     private lateinit var rows: ModuleSettingsRows
 
@@ -139,13 +145,14 @@ internal class ModuleSettingsPage(
             chapterBackupConfig = chapterBackupConfig,
             debugConfig = debugConfig,
             pageName = currentPage.name,
+            scrollPositions = captureScrollPositions(),
         )
     }
 
     private fun buildShell() {
         addView(createTitleBar(), LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 54)))
         addView(separator(), LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
-        val scrollView = ScrollView(activity).apply {
+        scrollView = ScrollView(activity).apply {
             isFillViewport = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             setBackgroundColor(theme.panelBackground)
@@ -238,6 +245,9 @@ internal class ModuleSettingsPage(
 
     private fun render(page: Page) {
         val previousPage = currentPage
+        if (hasRenderedPage) {
+            rememberCurrentScroll()
+        }
         currentPage = page
         titleText.text = page.title
         content.removeAllViews()
@@ -251,7 +261,33 @@ internal class ModuleSettingsPage(
             Page.StartupTab -> renderStartupTabPage()
             Page.BottomTab -> renderBottomTabPage()
         }
+        restoreScroll(page, previousPage)
         animatePageTransition(previousPage, page)
+        hasRenderedPage = true
+    }
+
+    private fun rememberCurrentScroll() {
+        if (::scrollView.isInitialized) {
+            pageScrollY[currentPage] = scrollView.scrollY
+        }
+    }
+
+    private fun restoreScroll(page: Page, previousPage: Page) {
+        val targetScrollY = pageScrollY[page] ?: 0
+        scrollView.scrollTo(0, 0)
+        ModuleViewTaskRegistry.post(scrollView) {
+            if (currentPage != page) return@post
+            val maxScrollY = (content.height - scrollView.height).coerceAtLeast(0)
+            scrollView.scrollTo(0, targetScrollY.coerceIn(0, maxScrollY))
+        }
+        if (page == previousPage) {
+            scrollView.scrollTo(0, targetScrollY)
+        }
+    }
+
+    private fun captureScrollPositions(): Map<String, Int> {
+        rememberCurrentScroll()
+        return pageScrollY.mapKeys { it.key.name }
     }
 
     private fun animatePageTransition(previousPage: Page, nextPage: Page) {
@@ -1019,6 +1055,7 @@ internal class ModuleSettingsPage(
         val chapterBackupConfig: ChapterBackupConfig,
         val debugConfig: DebugConfig,
         val pageName: String,
+        val scrollPositions: Map<String, Int> = emptyMap(),
     )
 
     private enum class Page(val title: String) {
