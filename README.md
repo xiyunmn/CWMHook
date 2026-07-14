@@ -1,6 +1,6 @@
 # CWMHook
 
-CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，当前模块版本为 `1.0.0`，基于现代 libxposed API 102 开发。
+CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，基于现代 libxposed API 102 开发。
 
 当前已验证兼容：
 
@@ -11,7 +11,7 @@ com.kuangxiangciweimao.novel
 
 ## 安装
 
-1. 在支持 libxposed API 102 的 LSPosed v2.1.0 中安装并启用模块。
+1. 在支持 libxposed API 102 的 LSPosed 中安装并启用模块。
 2. 将作用域设置为刺猬猫阅读。
 3. 强制停止并重新启动刺猬猫阅读。
 4. 长按书架页或阅读页的“更多”按钮进入模块设置。
@@ -36,7 +36,7 @@ com.kuangxiangciweimao.novel
 - 自动签到请求、章节导出或宿主章节下载进行中时会拒绝热重载，避免旧代际回调被提前卸载。
 - 热重载会关闭模块设置/章节导出窗口、解绑模块监听、清理注入 View、停止模块线程，并重建当前前台 Activity。
 - 配置仍保存在宿主本地 `SharedPreferences`，配置保存后按各功能既有机制生效；热重载只用于替换模块代码，不用于同步配置。
-- 模块没有手动热重载入口；安装新版 APK 后由 LSPosed v2.1.0 根据 `autoHotReload=true` 自动触发。
+- 模块没有手动热重载入口；安装新版 APK 后由 LSPosed 根据 `autoHotReload=true` 自动触发。
 - 当前支持 API 102 的框架版本为 LSPosed v2.1.0。
 
 宿主版本更新后，部分功能可能因内部实现变化而失效。遇到异常时请先关闭对应功能，并提供宿主版本、模块版本、复现步骤和详细日志。
