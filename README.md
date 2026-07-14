@@ -1,5 +1,8 @@
 # CWMHook
 
+<a href="https://github.com/Xposed-Modules-Repo/com.xiyunmn.cwmhook/releases/latest"><img alt="GitHub all releases" src="https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.xiyunmn.cwmhook/total?label=Downloads"></a>
+<a href="https://github.com/Xposed-Modules-Repo/com.xiyunmn.cwmhook/releases/latest"><img alt="GitHub latest release" src="https://img.shields.io/github/v/release/Xposed-Modules-Repo/com.xiyunmn.cwmhook"></a>
+
 CWMHook 是面向刺猬猫阅读的 Xposed 功能增强模块，基于现代 libxposed API 102 开发。
 
 当前已验证兼容：
