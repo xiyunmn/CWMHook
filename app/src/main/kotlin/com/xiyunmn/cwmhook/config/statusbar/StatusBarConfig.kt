@@ -8,7 +8,7 @@ data class StatusBarConfig(
     val version: Int,
 ) {
     companion object {
-        const val DEFAULT_ENABLED = true
+        const val DEFAULT_ENABLED = false
         const val DEFAULT_VERSION = 0
     }
 }

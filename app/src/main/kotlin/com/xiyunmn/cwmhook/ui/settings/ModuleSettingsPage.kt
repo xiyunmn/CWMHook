@@ -176,12 +176,12 @@ internal class ModuleSettingsPage(
             setBackgroundColor(theme.rowBackground)
             addView(
                 TextView(activity).apply {
-                    text = "\u2039"
-                    textSize = 30f
+                    text = "保存并重启"
+                    textSize = 14f
                     gravity = Gravity.CENTER
-                    setTextColor(theme.text)
+                    setTextColor(theme.accent)
                     isClickable = true
-                    setOnClickListener { handleBack() }
+                    setOnClickListener { saveAndRestart() }
                 },
                 LayoutParams(sideWidth, ViewGroup.LayoutParams.MATCH_PARENT),
             )
@@ -194,14 +194,7 @@ internal class ModuleSettingsPage(
             }
             addView(titleText, LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             addView(
-                TextView(activity).apply {
-                    text = "保存并重启"
-                    textSize = 14f
-                    gravity = Gravity.CENTER
-                    setTextColor(theme.accent)
-                    isClickable = true
-                    setOnClickListener { saveAndRestart() }
-                },
+                View(activity),
                 LayoutParams(sideWidth, ViewGroup.LayoutParams.MATCH_PARENT),
             )
         }

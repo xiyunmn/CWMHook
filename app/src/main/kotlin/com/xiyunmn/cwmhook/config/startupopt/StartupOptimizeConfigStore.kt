@@ -29,11 +29,11 @@ object StartupOptimizeConfigStore {
     fun defaultConfig(): StartupOptimizeConfig {
         return StartupOptimizeConfig(
             enabled = false,
-            skipSelfSplash = true,
-            skipThirdPartySplash = true,
-            disableStartPagePrefetch = true,
-            skipAdvertisementActivity = true,
-            disableNativeNetworkLog = true,
+            skipSelfSplash = false,
+            skipThirdPartySplash = false,
+            disableStartPagePrefetch = false,
+            skipAdvertisementActivity = false,
+            disableNativeNetworkLog = false,
             delayAuxiliaryStartupTasks = false,
             version = 0,
         )
