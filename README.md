@@ -1,3 +1,5 @@
+
+
 # CWMHook
 
 <a href="https://github.com/Xposed-Modules-Repo/com.xiyunmn.cwmhook/releases/latest"><img alt="GitHub all releases" src="https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.xiyunmn.cwmhook/total?label=Downloads"></a>
@@ -63,7 +65,7 @@ com.kuangxiangciweimao.novel
 
 构建需要 JDK 17 和 Android SDK Platform 37；应用 `targetSdk` 当前保持 36。
 
-`.github/workflows/` 提供 Debug、Beta 和 Release 三组手动构建任务。Beta/Release 签名需要配置 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 四个 GitHub Actions Secrets；本地未提供完整签名参数时会生成未签名 APK。
+`.github/workflows/` 提供 Debug、Beta 和 Release 三组手动构建任务。Beta/Release 签名需要配置 `KEYSTORE_BASE64`（Base64 编码的 keystore）、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 四个 GitHub Actions Secrets；本地未提供完整签名参数时会生成未签名 APK。
 
 ## 开源许可
 
