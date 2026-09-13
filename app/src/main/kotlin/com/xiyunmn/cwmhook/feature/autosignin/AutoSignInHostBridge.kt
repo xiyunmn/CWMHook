@@ -16,6 +16,7 @@ internal class AutoSignInHostBridge(
     data class HostResult(
         val message: String,
         val reward: Reward,
+        internal val hostResult: Any?,
     )
 
     data class Reward(
@@ -101,15 +102,19 @@ internal class AutoSignInHostBridge(
         }
     }
 
+    fun applyResultToHost(result: HostResult) {
+        updateHostUser(result.hostResult)
+    }
+
     private fun successProxy(callbackClass: Class<*>, callback: Callback): Any {
         return Proxy.newProxyInstance(classLoader, arrayOf(callbackClass)) { _, method, args ->
             if (method.name == "successCallback") {
                 val result = args?.firstOrNull()
-                updateHostUser(result)
                 callback.onSuccess(
                     HostResult(
                         message = result?.message().orEmpty(),
                         reward = result?.reward() ?: Reward(null, null, null),
+                        hostResult = result,
                     ),
                 )
             }

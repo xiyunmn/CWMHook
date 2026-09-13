@@ -2,15 +2,21 @@ package com.xiyunmn.cwmhook.feature.autosignin
 
 import android.app.Activity
 import android.widget.Toast
-import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.HostLoadActivityTracker
+import com.xiyunmn.cwmhook.core.runtime.ModuleViewTaskRegistry
+import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import io.github.libxposed.api.XposedModule
+import java.util.Collections
+import java.util.WeakHashMap
 
 object AutoSignInFeature {
     private const val TAG = "CWMHook.AutoSignInFeature"
-    private const val AUTO_DELAY_MS = 1_200L
+    internal const val HOST_QUIET_PERIOD_MS = 600L
+    private const val MIN_RETRY_DELAY_MS = 100L
 
     private val hookInstaller = AutoSignInHookInstaller(::scheduleAutoSignIn)
+    private val pendingActivities = Collections.newSetFromMap(WeakHashMap<Activity, Boolean>())
     private var executor: AutoSignInExecutor? = null
 
     fun install(module: XposedModule, classLoader: ClassLoader) {
@@ -30,6 +36,9 @@ object AutoSignInFeature {
         if (!current.shutdownIfIdle()) {
             ModuleFileLogger.w(TAG, "Hot reload rejected because auto sign-in is active")
             return false
+        }
+        synchronized(pendingActivities) {
+            pendingActivities.clear()
         }
         executor = null
         return true
@@ -54,8 +63,11 @@ object AutoSignInFeature {
     }
 
     private fun scheduleAutoSignIn(activity: Activity, reason: String) {
-        val currentExecutor = executor ?: return
-        if (activity.isFinishing) {
+        if (
+            executor == null ||
+            activity.isFinishing || activity.isDestroyed ||
+            activity.javaClass.name in startupActivities
+        ) {
             return
         }
         if (!activity.hasWindowFocus()) {
@@ -68,10 +80,67 @@ object AutoSignInFeature {
             )
             return
         }
-        ModuleViewTaskRegistry.post(activity.window.decorView, AUTO_DELAY_MS) {
-            if (!activity.isFinishing) {
-                currentExecutor.tryAuto(activity, reason)
+        val added = synchronized(pendingActivities) {
+            pendingActivities.add(activity)
+        }
+        if (!added) {
+            return
+        }
+        // Give a newly focused page a short settling window for its initial tasks.
+        postWhenHostIsQuiet(activity, reason, maxOf(HOST_QUIET_PERIOD_MS, delayUntilHostIsReadyMs()))
+    }
+
+    private fun postWhenHostIsQuiet(activity: Activity, reason: String, delayMs: Long) {
+        val posted = ModuleViewTaskRegistry.post(activity.window.decorView, delayMs.coerceAtLeast(MIN_RETRY_DELAY_MS)) {
+            if (activity.isFinishing || activity.isDestroyed || !activity.hasWindowFocus()) {
+                removePendingActivity(activity)
+                return@post
             }
+            val remainingDelayMs = delayUntilHostIsReadyMs()
+            if (remainingDelayMs > 0L) {
+                ModuleFileLogger.throttled(
+                    key = "$TAG.yieldToHost",
+                    intervalMs = 10_000L,
+                    priority = android.util.Log.INFO,
+                    tag = TAG,
+                    message = "Auto sign-in yields to host loading: remaining=${remainingDelayMs}ms",
+                )
+                postWhenHostIsQuiet(activity, reason, remainingDelayMs)
+                return@post
+            }
+            val current = executor
+            if (current == null) {
+                removePendingActivity(activity)
+            } else {
+                current.tryAuto(activity, reason) { deferred ->
+                    if (deferred) {
+                        postWhenHostIsQuiet(activity, reason, delayUntilHostIsReadyMs())
+                    } else {
+                        removePendingActivity(activity)
+                    }
+                }
+            }
+        }
+        if (!posted) {
+            removePendingActivity(activity)
+        }
+    }
+
+    private fun delayUntilHostIsReadyMs(): Long {
+        return HostLoadActivityTracker.remainingQuietDelayMs(
+            quietPeriodMs = HOST_QUIET_PERIOD_MS,
+        )
+    }
+
+    private val startupActivities = setOf(
+        CiweiMaoClasses.SPLASH_ACTIVITY,
+        CiweiMaoClasses.WELCOME_ACTIVITY,
+        CiweiMaoClasses.ADVERTISEMENT_ACTIVITY,
+    )
+
+    private fun removePendingActivity(activity: Activity) {
+        synchronized(pendingActivities) {
+            pendingActivities.remove(activity)
         }
     }
 }

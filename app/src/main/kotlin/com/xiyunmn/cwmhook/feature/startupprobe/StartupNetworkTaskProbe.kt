@@ -10,6 +10,7 @@ import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfig
 import com.xiyunmn.cwmhook.config.startupopt.StartupOptimizeConfigStore
 import com.xiyunmn.cwmhook.core.XposedCompat
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
+import com.xiyunmn.cwmhook.core.runtime.HostLoadActivityTracker
 import com.xiyunmn.cwmhook.host.CiweiMaoClasses
 import com.xiyunmn.cwmhook.host.CiweiMaoPackages
 import io.github.libxposed.api.XposedModule
@@ -99,6 +100,7 @@ object StartupNetworkTaskProbe {
 
         val hooked = XposedCompat.interceptProtective(module, executeMethod, "$TAG.BaseTaskNew.execute") { chain ->
             val task = chain.thisObject
+            HostLoadActivityTracker.onTaskScheduled()
             val context = taskContext(task)
             if (context != null) {
                 configure(context)
@@ -276,24 +278,29 @@ object StartupNetworkTaskProbe {
         }.getOrNull() ?: return false
 
         return XposedCompat.interceptProtective(module, method, "$TAG.NetUtils.$name") { chain ->
-            val context = chain.getArg(0) as? Context
-            if (context != null) {
-                configure(context)
-            }
-            if (!probeEnabled) {
-                return@interceptProtective chain.proceed()
-            }
-
-            val startMs = SystemClock.elapsedRealtime()
-            val call = describeNetCall(method, chain.getArgs())
-            val caller = if (shouldPrepareCaller(startMs)) callerFromStack() else ""
+            HostLoadActivityTracker.onNetworkCallStarted()
             try {
-                val result = chain.proceed()
-                logNetCallIfNeeded(startMs, call, caller, result as? String, null)
-                result
-            } catch (throwable: Throwable) {
-                logNetCallIfNeeded(startMs, call, caller, null, throwable)
-                throw throwable
+                val context = chain.getArg(0) as? Context
+                if (context != null) {
+                    configure(context)
+                }
+                if (!probeEnabled) {
+                    return@interceptProtective chain.proceed()
+                }
+
+                val startMs = SystemClock.elapsedRealtime()
+                val call = describeNetCall(method, chain.getArgs())
+                val caller = if (shouldPrepareCaller(startMs)) callerFromStack() else ""
+                try {
+                    val result = chain.proceed()
+                    logNetCallIfNeeded(startMs, call, caller, result as? String, null)
+                    result
+                } catch (throwable: Throwable) {
+                    logNetCallIfNeeded(startMs, call, caller, null, throwable)
+                    throw throwable
+                }
+            } finally {
+                HostLoadActivityTracker.onNetworkCallFinished()
             }
         }
     }
