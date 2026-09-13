@@ -3,6 +3,7 @@ package com.xiyunmn.cwmhook.feature.chapterbackup
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.core.logging.ModuleFileLogger
@@ -13,6 +14,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.ArrayList
 import java.util.Date
@@ -20,6 +22,9 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 internal class ChapterBackupExporter(
     private val classLoader: ClassLoader,
@@ -638,9 +643,16 @@ internal class ChapterBackupExporter(
     }
 
     private fun decrypt(cipherText: String, key: String): String {
-        val cryptoClass = Class.forName(CiweiMaoClasses.CHAPTER_CRYPTO, false, classLoader)
-        return cryptoClass.getMethod("a", String::class.java, String::class.java)
-            .invoke(null, cipherText, key) as String
+        val keyBytes = MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray(StandardCharsets.UTF_8))
+        val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            SecretKeySpec(keyBytes, "AES"),
+            IvParameterSpec(ByteArray(AES_BLOCK_SIZE_BYTES)),
+        )
+        val encryptedBytes = Base64.decode(cipherText.toByteArray(StandardCharsets.UTF_8), Base64.DEFAULT)
+        return String(cipher.doFinal(encryptedBytes), StandardCharsets.UTF_8)
     }
 
     private fun currentReaderId(): String {
@@ -718,6 +730,7 @@ internal class ChapterBackupExporter(
     )
 
     private companion object {
+        const val AES_BLOCK_SIZE_BYTES = 16
         const val DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000L
         const val EXPORT_AFTER_DOWNLOAD_DELAY_MS = 350L
     }

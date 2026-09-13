@@ -32,7 +32,6 @@ object CiweiMaoClasses {
     const val READER_TITLE_BAR = "com.kuangxiangciweimao.novel.widgets.reader.ReaderTitleBar"
     const val LOGINED_USER = "com.kuangxiangciweimao.novel.entity.LoginedUser"
     const val DAO_FACTORY = "com.kuangxiangciweimao.novel.dao.DaoFactory"
-    const val CHAPTER_CRYPTO = "com.bbs.css.a"
     const val BASE64_HELPER = "com.kuangxiangciweimao.novel.activity.booklist.ada.b"
     const val BASE_TASK_NEW = "com.kuangxiangciweimao.novel.task.newtask.BaseTaskNew"
     const val NET_UTILS = "com.kuangxiangciweimao.novel.utils.NetUtils"
