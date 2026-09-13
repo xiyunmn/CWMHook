@@ -1,0 +1,34 @@
+Liquid glass third-party notices
+
+CWMHook's liquid-glass rendering, optical shaders and spring motion include
+adaptations of code from the public projects listed below. Native View integration
+and reversible view-property ownership are by xiyunmn.
+The CWMHook integration targets the host's native main tabs, book-detail actions
+and chapter-catalog actions. Original controls and click listeners are retained.
+
+ForbidAd4TieBa
+https://github.com/aikavvak12una/ForbidAd4TieBa
+Reference commit: 90037020861e8d559e07a581c41fde640ebb8e02
+License: GNU GPL version 3; see gpl-3.0.txt.
+The material stack and droplet optics are adapted for the native View renderer.
+
+compose-miuix-ui / miuix-blur 0.9.3
+https://github.com/compose-miuix-ui/miuix
+Copyright 2026, compose-miuix-ui contributors
+License: Apache-2.0; see apache-2.0.txt.
+GlassLighting and GlassTilt adapt the highlight shader and gravity projection
+to native View/AGSL rendering.
+
+Kyant0 / KernelSU
+https://github.com/Kyant0
+https://github.com/tiann/KernelSU
+License: Apache-2.0 for the adapted glass components; see apache-2.0.txt.
+Lens, specular lighting and spring parameters are adapted for native View/AGSL
+rendering. No Compose or external blur library is included.
+
+WeChat-LiquidGlass
+https://github.com/liuran001/WeChat-LiquidGlass
+Reference commit: 5d120f15e08665d27f1a552f6138101aa6dee4b2
+Copyright (c) 2026 liuran001
+License: MIT; see wechat-liquidglass.txt.
+Spring integration and droplet optics are adapted for the native glass renderer.

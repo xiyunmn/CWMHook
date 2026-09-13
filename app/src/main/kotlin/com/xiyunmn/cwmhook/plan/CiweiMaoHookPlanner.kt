@@ -5,6 +5,7 @@ import com.xiyunmn.cwmhook.feature.autosignin.AutoSignInFeature
 import com.xiyunmn.cwmhook.feature.bottomtab.BottomTabFeature
 import com.xiyunmn.cwmhook.feature.bookshelf.BookshelfFeature
 import com.xiyunmn.cwmhook.feature.chapterbackup.ChapterBackupFeature
+import com.xiyunmn.cwmhook.feature.glassbar.GlassBarsFeature
 import com.xiyunmn.cwmhook.feature.readerfont.ReaderFontFeature
 import com.xiyunmn.cwmhook.feature.rewardad.RewardAdSkipFeature
 import com.xiyunmn.cwmhook.feature.startupopt.StartupOptimizeFeature
@@ -48,6 +49,9 @@ object CiweiMaoHookPlanner {
                 HookInstallEntry("ModuleSettingsFeature.install") { classLoader ->
                     ModuleSettingsFeature.install(module, classLoader)
                 },
+                HookInstallEntry("GlassBarsFeature.install") { classLoader ->
+                    GlassBarsFeature.install(module, classLoader)
+                },
             ),
         )
     }
@@ -90,6 +94,9 @@ object CiweiMaoHookPlanner {
                 },
                 HookInstallEntry("ModuleSettingsFeature.retryDeferredHooks") { classLoader ->
                     ModuleSettingsFeature.retryDeferredHooks(module, classLoader, reason)
+                },
+                HookInstallEntry("GlassBarsFeature.retryDeferredHooks") { classLoader ->
+                    GlassBarsFeature.retryDeferredHooks(module, classLoader, reason)
                 },
             ),
         )

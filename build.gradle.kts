@@ -164,18 +164,26 @@ tasks.register("verifyArchitecture") {
             ),
         )
         scan(
-            title = "Compose, Material Components, and blur/render-effect dependencies are not allowed.",
+            title = "Compose, Material Components, and external blur dependencies are not allowed.",
             files = appAndBuildFiles,
             pattern = Regex(
                 listOf(
                     pieces("androidx\\.com", "pose"),
-                    pieces("com", "pose"),
+                    pieces("org\\.jetbrains\\.kotlin\\.plugin\\.com", "pose"),
+                    pieces("\\bcom", "pose\\s*="),
+                    pieces("\\bcom", "poseOptions\\b"),
                     pieces("material", "3"),
                     pieces("com\\.google\\.android\\.mat", "erial"),
                     pieces("Blur", "View"),
-                    pieces("Render", "Effect"),
                 ).joinToString("|"),
             ),
+        )
+        scan(
+            title = "System render effects must stay in the shared liquid-glass renderer.",
+            files = appAndBuildFiles.filter { file ->
+                !relativePath(file).startsWith("app/src/main/kotlin/com/xiyunmn/cwmhook/core/glass/")
+            },
+            pattern = Regex(pieces("Render", "Effect")),
         )
         scan(
             title = "The standalone module console and libxposed service are not allowed.",

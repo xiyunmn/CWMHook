@@ -25,6 +25,8 @@ import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfig
 import com.xiyunmn.cwmhook.config.chapterbackup.ChapterBackupConfigStore
 import com.xiyunmn.cwmhook.config.debug.DebugConfig
 import com.xiyunmn.cwmhook.config.debug.DebugConfigStore
+import com.xiyunmn.cwmhook.config.glassbar.GlassBarsConfig
+import com.xiyunmn.cwmhook.config.glassbar.GlassBarsConfigStore
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfig
 import com.xiyunmn.cwmhook.config.readerfont.ReaderFontConfigStore
 import com.xiyunmn.cwmhook.config.rewardad.RewardAdSkipConfig
@@ -52,6 +54,7 @@ internal class ModuleSettingsPage(
     initialStatusBarConfig: StatusBarConfig,
     initialBookshelfConfig: BookshelfConfig,
     initialBottomTabConfig: BottomTabConfig,
+    initialGlassBarsConfig: GlassBarsConfig,
     initialReaderFontConfig: ReaderFontConfig,
     initialAutoSignInConfig: AutoSignInConfig,
     initialStartupOptimizeConfig: StartupOptimizeConfig,
@@ -72,6 +75,7 @@ internal class ModuleSettingsPage(
         StatusBarConfig,
         BookshelfConfig,
         BottomTabConfig,
+        GlassBarsConfig,
         ReaderFontConfig,
         AutoSignInConfig,
         StartupOptimizeConfig,
@@ -87,6 +91,7 @@ internal class ModuleSettingsPage(
     private var statusBarConfig = restoreState?.statusBarConfig ?: initialStatusBarConfig
     private var bookshelfConfig = restoreState?.bookshelfConfig ?: initialBookshelfConfig
     private var bottomTabConfig = restoreState?.bottomTabConfig ?: initialBottomTabConfig
+    private var glassBarsConfig = restoreState?.glassBarsConfig ?: initialGlassBarsConfig
     private var readerFontConfig = restoreState?.readerFontConfig ?: initialReaderFontConfig
     private var autoSignInConfig = restoreState?.autoSignInConfig ?: initialAutoSignInConfig
     private var startupOptimizeConfig = restoreState?.startupOptimizeConfig ?: initialStartupOptimizeConfig
@@ -137,6 +142,7 @@ internal class ModuleSettingsPage(
             statusBarConfig = statusBarConfig,
             bookshelfConfig = bookshelfConfig,
             bottomTabConfig = bottomTabConfig,
+            glassBarsConfig = glassBarsConfig,
             readerFontConfig = readerFontConfig,
             autoSignInConfig = autoSignInConfig,
             startupOptimizeConfig = startupOptimizeConfig,
@@ -253,6 +259,7 @@ internal class ModuleSettingsPage(
             Page.StartupOptimize -> renderStartupOptimizePage()
             Page.StartupTab -> renderStartupTabPage()
             Page.BottomTab -> renderBottomTabPage()
+            Page.GlassBars -> renderGlassBarsPage()
         }
         restoreScroll(page, previousPage)
         animatePageTransition(previousPage, page)
@@ -339,6 +346,14 @@ internal class ModuleSettingsPage(
             },
             onOpen = null,
             icon = IconType.EYE_OFF,
+        )
+        addOverviewRow(
+            title = "液态玻璃悬浮底栏",
+            subtitle = "主界面、书籍详情、目录 · 已启用 ${glassBarsConfig.enabledCount}/3 处",
+            enabled = null,
+            onToggle = null,
+            onOpen = { render(Page.GlassBars) },
+            icon = IconType.UI,
         )
 
         addSectionTitle("阅读")
@@ -681,6 +696,13 @@ internal class ModuleSettingsPage(
         )
     }
 
+    private fun renderGlassBarsPage() {
+        ModuleSettingsGlassBarRows(rows, glassBarsConfig) { next ->
+            glassBarsConfig = next.copy(version = GlassBarsConfigStore.nextVersion(glassBarsConfig))
+            render(Page.GlassBars)
+        }.render()
+    }
+
     private fun renderBottomTabPage() {
         addInfoRow("拖拽排序", "长按左侧拖拽柄后上下移动，点击右侧状态可显示或隐藏。")
         val container = LinearLayout(activity).apply {
@@ -778,6 +800,7 @@ internal class ModuleSettingsPage(
             statusBarConfig,
             bookshelfConfig,
             bottomTabConfig,
+            glassBarsConfig,
             readerFontConfig,
             autoSignInConfig,
             startupOptimizeConfig,
@@ -796,6 +819,7 @@ internal class ModuleSettingsPage(
             statusBarConfig,
             bookshelfConfig,
             bottomTabConfig,
+            glassBarsConfig,
             readerFontConfig,
             autoSignInConfig,
             startupOptimizeConfig,
@@ -824,6 +848,7 @@ internal class ModuleSettingsPage(
         bookshelfConfig = BookshelfConfigStore.defaultConfig()
         bottomTabConfig = BottomTabConfigStore.defaultConfig()
         bottomTabState = BottomTabPanelState.from(bottomTabConfig)
+        glassBarsConfig = GlassBarsConfigStore.defaultConfig()
         readerFontConfig = ReaderFontConfigStore.defaultConfig()
         autoSignInConfig = AutoSignInConfigStore.defaultConfig()
         startupOptimizeConfig = StartupOptimizeConfigStore.defaultConfig()
@@ -1040,6 +1065,7 @@ internal class ModuleSettingsPage(
         val statusBarConfig: StatusBarConfig,
         val bookshelfConfig: BookshelfConfig,
         val bottomTabConfig: BottomTabConfig,
+        val glassBarsConfig: GlassBarsConfig,
         val readerFontConfig: ReaderFontConfig,
         val autoSignInConfig: AutoSignInConfig,
         val startupOptimizeConfig: StartupOptimizeConfig,
@@ -1059,6 +1085,7 @@ internal class ModuleSettingsPage(
         StartupOptimize("启动加速"),
         StartupTab("启动默认 Tab"),
         BottomTab("底栏 Tab 自定义"),
+        GlassBars("液态玻璃悬浮底栏"),
     }
 
     private companion object {

@@ -66,6 +66,14 @@ object CiweiMaoClasses {
 
 object CiweiMaoIds {
     const val MAIN_TAB_GROUP = "tab"
+    const val MAIN_TAB_CONTENT = "realtabcontent"
+    const val BOOK_DETAIL_BOTTOM_BAR = "bottomlay"
+    const val BOOK_DETAIL_SCROLL = "scroolview"
+    const val BOOK_DETAIL_READ_ACTION = "bottomlay2"
+    const val CATALOG_BOTTOM_BAR = "bottomlay1"
+    const val CATALOG_DOWNLOAD_ACTION = "downlay"
+    const val CATALOG_LIST = "list"
+    const val CATALOG_BOTTOM_DIVIDER = "div2"
     const val FLOATING_ENTRY = "animation_view"
     const val READER_MORE_LAYOUT = "iv_more_layout"
     const val MAIN_VIEW_PAGER = "viewPage"
@@ -78,6 +86,11 @@ object CiweiMaoIds {
 object CiweiMaoMembers {
     const val DG_FRAME_INIT_WIDGETS = "initWidgets"
     const val DG_FRAME_START_POS = "pos"
+}
+
+object CiweiMaoViewClasses {
+    const val RECYCLER_VIEW = "androidx.recyclerview.widget.RecyclerView"
+    const val NESTED_SCROLL_VIEW = "androidx.core.widget.NestedScrollView"
 }
 
 object CiweiMaoIntentExtras {
